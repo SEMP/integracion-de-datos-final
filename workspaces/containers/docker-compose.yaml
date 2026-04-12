@@ -1,7 +1,7 @@
 services:
-  mia-mysql:
+  tf-mysql:
     image: mysql:8.0
-    container_name: mia-mysql
+    container_name: tf-mysql
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD
@@ -13,18 +13,18 @@ services:
     expose:
       - "3306"
     volumes:
-      - mia-mysql_data:/var/lib/mysql:rw
+      - tf-mysql_data:/var/lib/mysql:rw
       - ./initdb:/docker-entrypoint-initdb.d:ro
       - ${CSV_DIR}:/csv
       - /etc/localtime:/etc/localtime:ro
     command: --default-authentication-plugin=mysql_native_password --local-infile=1 --secure-file-priv=/csv
 
-  mia-phpmyadmin:
+  tf-phpmyadmin:
     image: phpmyadmin:latest
-    container_name: mia-phpmyadmin
+    container_name: tf-phpmyadmin
     restart: unless-stopped
     environment:
-      - PMA_HOST=mia-mysql
+      - PMA_HOST=tf-mysql
       - PMA_USER=${MYSQL_USER}
       - PMA_PASSWORD=${MYSQL_PASSWORD}
     ports:
@@ -34,14 +34,14 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
-      - mia-mysql
+      - tf-mysql
 
-  mia-metabase:
+  tf-metabase:
     build:
       context: .
       dockerfile: Dockerfile
     image: metabase-duckdb:latest
-    container_name: mia-metabase
+    container_name: tf-metabase
     restart: unless-stopped
     environment:
       - MB_PLUGINS_DIR=${MB_PLUGINS_DIR:-/plugins}
@@ -50,7 +50,7 @@ services:
       - MB_DB_PORT=3306
       - MB_DB_USER=${MYSQL_USER}
       - MB_DB_PASS=${MYSQL_PASSWORD}
-      - MB_DB_HOST=mia-mysql
+      - MB_DB_HOST=tf-mysql
     ports:
       - "${MB_PORT}:3000"
     expose:
@@ -58,8 +58,8 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
     depends_on:
-      - mia-mysql
+      - tf-mysql
 
 volumes:
-  mia-mysql_data:
-    name: mia-mysql_data
+  tf-mysql_data:
+    name: tf-mysql_data
