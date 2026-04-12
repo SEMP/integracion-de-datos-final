@@ -271,6 +271,22 @@ docker exec -it mia-mysql mysql -u airbyte -pairbyte datatran \
   caption: [Configuración del destination MotherDuck en Airbyte],
 )
 
+=== Connection: sync mode
+
+Se seleccionó *Full Refresh | Overwrite* para la tabla `accidentes_raw`. El dataset DATATRAN 2026 es estático (no recibe actualizaciones incrementales) y no dispone de columnas confiables de timestamp de modificación (`created_at`, `updated_at`) que habilitarían un modo incremental. La estrategia Overwrite garantiza que cada sync reemplaza completamente el contenido de la tabla destino, manteniendo consistencia sin riesgo de duplicados.
+
+#figure(
+  image("assets/airbyte_connection_datatran.png", width: 100%),
+  caption: [Selección de sync mode: Full Refresh | Overwrite sobre `accidentes_raw` (30/30 campos)],
+)
+
+El paso siguiente configura los metadatos de la connection: nombre, tipo de schedule y namespace de destino. Se eligió *Destination-defined* como namespace para que los datos queden en el schema `datatran` configurado en el destination, y *Manual* como schedule dado que la orquestación la maneja Prefect.
+
+#figure(
+  image("assets/airbyte_connection_datatran_2.png", width: 100%),
+  caption: [Configuración de la connection: `MySQL_Datatran → MotherDuck_datatran`, schedule Manual, namespace Destination-defined],
+)
+
 == Paso 4: Modelos dbt
 
 El proyecto dbt en `workspaces/dbt_proyecto/` transforma los datos crudos en dos capas.
