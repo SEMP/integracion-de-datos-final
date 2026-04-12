@@ -1,50 +1,30 @@
--- Maven Fuzzy Factory — carga de datos desde CSV
--- Los archivos CSV deben estar montados en /csv dentro del contenedor.
--- Ver volumen csv_data en docker-compose.yaml.
+-- =============================================================
+-- 02_load_data.sql — Carga del CSV DATATRAN 2026 a MySQL
+--
+-- PRE-REQUISITO: ejecutar antes de iniciar el contenedor:
+--   python3 workspaces/scripts/convert_csv_to_utf8.py
+-- El script genera datatran2026_utf8.csv en el mismo directorio
+-- que el CSV original. Asegurarse de que CSV_DIR en .env apunte
+-- a ese directorio.
+--
+-- El CSV original tiene:
+--   · Encoding: Latin-1  →  convertido a UTF-8 por el script
+--   · Separador de campos: ;
+--   · Separador decimal:   , (lat/lon/km)
+--   · Encabezado: fila 1  →  IGNORE 1 LINES
+--   · tracado_via contiene ; internos, siempre entre comillas
+--   · Valores nulos: cadena 'NA'  →  dbt convierte con NULLIF
+--   · Fin de línea: LF (\n) tras la conversión
+-- =============================================================
 
-USE maven_fuzzy_factory;
+USE datatran;
 
-LOAD DATA INFILE '/csv/products.csv'
-INTO TABLE products
-FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
-LINES TERMINATED BY '\n'
-IGNORE 1 ROWS
-(product_id, created_at, product_name);
-
-LOAD DATA INFILE '/csv/website_sessions.csv'
-INTO TABLE website_sessions
-FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
-LINES TERMINATED BY '\n'
-IGNORE 1 ROWS
-(website_session_id, created_at, user_id, is_repeat_session,
- utm_source, utm_campaign, utm_content, device_type, http_referer);
-
-LOAD DATA INFILE '/csv/orders.csv'
-INTO TABLE orders
-FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
-LINES TERMINATED BY '\n'
-IGNORE 1 ROWS
-(order_id, created_at, website_session_id, user_id,
- primary_product_id, items_purchased, price_usd, cogs_usd);
-
-LOAD DATA INFILE '/csv/order_items.csv'
-INTO TABLE order_items
-FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
-LINES TERMINATED BY '\n'
-IGNORE 1 ROWS
-(order_item_id, created_at, order_id, product_id,
- is_primary_item, price_usd, cogs_usd);
-
-LOAD DATA INFILE '/csv/order_item_refunds.csv'
-INTO TABLE order_item_refunds
-FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
-LINES TERMINATED BY '\n'
-IGNORE 1 ROWS
-(order_item_refund_id, created_at, order_item_id, order_id, refund_amount_usd);
-
-LOAD DATA INFILE '/csv/website_pageviews.csv'
-INTO TABLE website_pageviews
-FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
-LINES TERMINATED BY '\n'
-IGNORE 1 ROWS
-(website_pageview_id, created_at, website_session_id, pageview_url);
+LOAD DATA INFILE '/csv/datatran2026_utf8.csv'
+INTO TABLE accidentes_raw
+CHARACTER SET utf8mb4
+FIELDS
+    TERMINATED BY ';'
+    ENCLOSED BY '"'
+LINES
+    TERMINATED BY '\n'
+IGNORE 1 LINES;

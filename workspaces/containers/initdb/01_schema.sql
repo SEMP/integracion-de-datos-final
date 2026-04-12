@@ -1,64 +1,55 @@
--- Maven Fuzzy Factory — schema
--- Ejecutado automáticamente por MySQL al primer arranque del contenedor.
+-- =============================================================
+-- 01_schema.sql — Schema fuente: Accidentes de tráfico (DATATRAN PRF)
+-- Todos los campos se almacenan como TEXT para evitar fallos de
+-- conversión de tipos. dbt se encargará del tipado final.
+-- =============================================================
 
-USE maven_fuzzy_factory;
+CREATE DATABASE IF NOT EXISTS datatran
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS products (
-    product_id   INT            NOT NULL,
-    created_at   DATETIME       NOT NULL,
-    product_name VARCHAR(45)    NOT NULL,
-    PRIMARY KEY (product_id)
-);
+USE datatran;
 
-CREATE TABLE IF NOT EXISTS website_sessions (
-    website_session_id BIGINT       NOT NULL,
-    created_at         DATETIME     NOT NULL,
-    user_id            BIGINT       NOT NULL,
-    is_repeat_session  BINARY(1)    NOT NULL,
-    utm_source         VARCHAR(45)  NULL,
-    utm_campaign       VARCHAR(45)  NULL,
-    utm_content        VARCHAR(45)  NULL,
-    device_type        VARCHAR(45)  NOT NULL,
-    http_referer       VARCHAR(45)  NULL,
-    PRIMARY KEY (website_session_id)
-);
+-- Tabla raw: refleja exactamente las 30 columnas del CSV 2026.
+-- Tipos TEXT preservan:
+--   · km, latitude, longitude  → decimales con coma (ej: -7,291548)
+--   · tracado_via              → valores múltiples separados con ; (ej: Aclive;Reta)
+--   · valores 'NA'             → cadena literal (dbt aplica NULLIF)
+--   · data_inversa / horario   → strings, dbt castea a DATE / TIME
 
-CREATE TABLE IF NOT EXISTS website_pageviews (
-    website_pageview_id BIGINT      NOT NULL,
-    created_at          DATETIME    NOT NULL,
-    website_session_id  BIGINT      NOT NULL,
-    pageview_url        VARCHAR(45) NOT NULL,
-    PRIMARY KEY (website_pageview_id)
-);
+DROP TABLE IF EXISTS accidentes_raw;
 
-CREATE TABLE IF NOT EXISTS orders (
-    order_id           BIGINT          NOT NULL,
-    created_at         DATETIME        NOT NULL,
-    website_session_id BIGINT          NOT NULL,
-    user_id            BIGINT          NOT NULL,
-    primary_product_id INT             NOT NULL,
-    items_purchased    INT             NOT NULL,
-    price_usd          DECIMAL(6,2)    NOT NULL,
-    cogs_usd           DECIMAL(6,2)    NOT NULL,
-    PRIMARY KEY (order_id)
-);
-
-CREATE TABLE IF NOT EXISTS order_items (
-    order_item_id  BIGINT          NOT NULL,
-    created_at     DATETIME        NOT NULL,
-    order_id       BIGINT          NOT NULL,
-    product_id     INT             NOT NULL,
-    is_primary_item BINARY(1)      NOT NULL,
-    price_usd      DECIMAL(6,2)    NOT NULL,
-    cogs_usd       DECIMAL(6,2)    NOT NULL,
-    PRIMARY KEY (order_item_id)
-);
-
-CREATE TABLE IF NOT EXISTS order_item_refunds (
-    order_item_refund_id BIGINT          NOT NULL,
-    created_at           DATETIME        NOT NULL,
-    order_item_id        BIGINT          NOT NULL,
-    order_id             BIGINT          NOT NULL,
-    refund_amount_usd    DECIMAL(6,2)    NOT NULL,
-    PRIMARY KEY (order_item_refund_id)
-);
+CREATE TABLE accidentes_raw (
+    id                      TEXT,
+    data_inversa            TEXT,
+    dia_semana              TEXT,
+    horario                 TEXT,
+    uf                      TEXT,
+    br                      TEXT,
+    km                      TEXT,
+    municipio               TEXT,
+    causa_acidente          TEXT,
+    tipo_acidente           TEXT,
+    classificacao_acidente  TEXT,
+    fase_dia                TEXT,
+    sentido_via             TEXT,
+    condicao_metereologica  TEXT,
+    tipo_pista              TEXT,
+    tracado_via             TEXT,   -- puede contener ; internos (ej: Aclive;Reta)
+    uso_solo                TEXT,
+    pessoas                 TEXT,
+    mortos                  TEXT,
+    feridos_leves           TEXT,
+    feridos_graves          TEXT,
+    ilesos                  TEXT,
+    ignorados               TEXT,
+    feridos                 TEXT,
+    veiculos                TEXT,
+    latitude                TEXT,   -- decimal con coma (ej: -7,291548)
+    longitude               TEXT,   -- decimal con coma (ej: -48,286252)
+    regional                TEXT,
+    delegacia               TEXT,
+    uop                     TEXT
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
