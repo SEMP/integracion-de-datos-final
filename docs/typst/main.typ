@@ -381,9 +381,15 @@ En el setup inicial de Metabase se selecciona el driver *DuckDB* y se configura:
 #table(
   columns: (auto, 1fr),
   table.header([*Campo*], [*Valor*]),
-  [Database file],         [`md:airbyte_curso`],
+  [Nombre para mostrar],   [`Motherduck_Trabajo_Final`],
+  [Database file],         [`md:airbyte_trabajo`],
   [MotherDuck Token],      [Token de la cuenta (campo separado del driver)],
-  [Old implicit casting],  [Activado],
+  [Use DuckDB old\_implicit\_casting option], [Activado],
+)
+
+#figure(
+  image("assets/configure_motherduck_metabase.png", width: 72%),
+  caption: [Configuración de la conexión DuckDB/MotherDuck en Metabase],
 )
 
 === Visualizaciones planeadas

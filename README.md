@@ -78,9 +78,9 @@ Trabajo_Final/
 │   │   ├── docker-compose.yaml              # MySQL + phpMyAdmin + Metabase
 │   │   ├── example.env                      # Variables de entorno (plantilla)
 │   │   └── initdb/
+│   │       ├── 00_setup.sh                  # Crea BDs y otorga permisos (se ejecuta primero)
 │   │       ├── 01_schema.sql                # Schema MySQL (todo TEXT)
-│   │       ├── 02_load_data.sql             # LOAD DATA INFILE
-│   │       └── 03_create_metabase_db.sh     # BD y permisos para Metabase
+│   │       └── 02_load_data.sql             # LOAD DATA INFILE
 │   ├── dbt_proyecto/                        # (pendiente)
 │   └── prefect/                             # (pendiente)
 ```
@@ -96,32 +96,35 @@ UTF-8. El script `convert_csv_to_utf8.py` realiza la conversión sin modificar e
 original y maneja correctamente los campos con `;` internos (como `tracado_via`).
 
 ```bash
-# Desde la raíz del proyecto
+# 1. Copiar la plantilla y configurar la ruta a los CSV originales
+cp workspaces/scripts/example.env workspaces/scripts/.env
+# Editar .env y ajustar CSV_SOURCE_DIR con la ruta al directorio de los CSV originales
+
+# 2. Ejecutar desde la raíz del proyecto
 python3 workspaces/scripts/convert_csv_to_utf8.py
 ```
 
-El script lee por defecto desde:
-```
-.../workspaces/data/datatran2026.csv
-```
-y genera:
-```
-.../workspaces/data/datatran2026_utf8.csv
-```
-
-Para usar rutas distintas:
-```bash
-python3 workspaces/scripts/convert_csv_to_utf8.py \
-    --input  /ruta/al/datatran2026.csv \
-    --output /ruta/de/salida/datatran2026_utf8.csv
-```
+El script lee todos los `.csv` de `CSV_SOURCE_DIR` (definido en `workspaces/scripts/.env`)
+y escribe los archivos convertidos en `data/` en la raíz del proyecto.
 
 Salida esperada:
 ```
-Leyendo  : .../datatran2026.csv
-Escribiendo: .../datatran2026_utf8.csv
-Filas escritas (incluye encabezado): 11381
-Listo.
+Origen  : /ruta/a/los/csvs/originales
+Destino : /ruta/al/proyecto/data
+Archivos: 1
+
+  Leyendo    : .../datatran2026.csv
+  Escribiendo: .../data/datatran2026_utf8.csv
+  Filas escritas (incluye encabezado): 11381
+
+Conversión completada.
+```
+
+Para convertir un archivo específico sin usar `.env`:
+```bash
+python3 workspaces/scripts/convert_csv_to_utf8.py \
+    --input  /ruta/datatran2026.csv \
+    --output /ruta/de/salida/datatran2026_utf8.csv
 ```
 
 ### Paso 2 — Configurar variables de entorno
@@ -136,12 +139,13 @@ Editar `.env` y ajustar al menos:
 ```dotenv
 MYSQL_ROOT_PASSWORD=<contraseña segura>
 MYSQL_PASSWORD=<contraseña para el usuario airbyte>
-# Directorio donde quedó datatran2026_utf8.csv
-CSV_DIR=/ruta/absoluta/al/directorio/con/el/csv
+MYSQL_DATABASE=datatran
+# CSV_DIR apunta a data/ en la raíz del proyecto (ruta relativa al docker-compose)
+CSV_DIR=../../data
 ```
 
-> `CSV_DIR` se monta en `/csv` dentro del contenedor MySQL. El archivo debe llamarse
-> `datatran2026_utf8.csv` o ajustar la ruta en `initdb/02_load_data.sql`.
+> `CSV_DIR` se monta en `/csv` dentro del contenedor MySQL. La ruta relativa
+> `../../data` se resuelve desde `workspaces/containers/` hacia la raíz del proyecto.
 
 ### Paso 3 — Levantar los contenedores
 
@@ -154,19 +158,19 @@ Servicios que se inician:
 
 | Servicio | Puerto | Descripción |
 |---|---|---|
-| `mia-mysql` | 3306 | MySQL 8.0 — fuente DATATRAN |
-| `mia-phpmyadmin` | 8095 | Interfaz web para MySQL |
-| `mia-metabase` | 3000 | Dashboard (Metabase + driver DuckDB) |
+| `tf-mysql` | 3306 | MySQL 8.0 — fuente DATATRAN |
+| `tf-phpmyadmin` | 8095 | Interfaz web para MySQL |
+| `tf-metabase` | 3000 | Dashboard (Metabase + driver DuckDB) |
 
-Al primer arranque, MySQL ejecuta automáticamente (en orden):
-1. `01_schema.sql` — crea la base `datatran` y la tabla `accidentes_raw` (todo TEXT)
-2. `02_load_data.sql` — carga `datatran2026_utf8.csv` con `LOAD DATA INFILE`
-3. `03_create_metabase_db.sh` — crea la base `metabase` y otorga permisos
+Al primer arranque, MySQL ejecuta automáticamente (en orden alfabético):
+1. `00_setup.sh` — crea las bases `${MYSQL_DATABASE}` y `metabase`, otorga permisos a `airbyte`
+2. `01_schema.sql` — crea la tabla `accidentes_raw` (todo TEXT)
+3. `02_load_data.sql` — carga `datatran2026_utf8.csv` con `LOAD DATA INFILE`
 
 ### Paso 4 — Verificar la carga
 
 ```bash
-docker exec -it mia-mysql mysql -u airbyte -pairbyte datatran \
+docker exec -it tf-mysql mysql -u airbyte -pairbyte datatran \
     -e "SELECT COUNT(*) AS total FROM accidentes_raw;"
 ```
 
@@ -174,7 +178,7 @@ Resultado esperado: `11380`
 
 ```bash
 # Verificar que tracado_via con ; internos se cargó correctamente
-docker exec -it mia-mysql mysql -u airbyte -pairbyte datatran \
+docker exec -it tf-mysql mysql -u airbyte -pairbyte datatran \
     -e "SELECT tracado_via FROM accidentes_raw WHERE tracado_via LIKE '%;%' LIMIT 5;"
 ```
 
@@ -219,7 +223,15 @@ python pipeline.py
 
 ### Paso 8 — Metabase: dashboard
 
-Abrir `http://localhost:3000` y conectar a MotherDuck usando el token.
+Abrir `http://localhost:3000`, completar el setup inicial y agregar la base de datos:
+
+| Campo | Valor |
+|---|---|
+| Driver | DuckDB |
+| Nombre para mostrar | `Motherduck_Trabajo_Final` |
+| Database file | `md:airbyte_trabajo` |
+| Use DuckDB old_implicit_casting option | Activado |
+| MotherDuck Token | Token de la cuenta (campo separado) |
 
 ---
 
