@@ -1,5 +1,15 @@
 #import "@preview/basic-report:0.4.0": *
 
+// Renderiza un identificador de código con oportunidades de salto de línea
+// después de cada guión bajo. Útil para nombres largos de tests dbt en tablas.
+#let dbt(s) = {
+  let parts = s.split("_")
+  parts.enumerate().map(((i, p)) => {
+    if i < parts.len() - 1 { [#raw(p)#raw("_")#sym.zws] }
+    else { raw(p) }
+  }).join()
+}
+
 #show: it => basic-report(
   doc-category: "Integración de datos",
   doc-title: "Trabajo Práctico Final",
@@ -321,14 +331,14 @@ La elección de Kimball sobre OBT se justifica por la presencia de dimensiones d
 === Tests de calidad (dbt-expectations)
 
 #table(
-  columns: (auto, auto, 1fr),
+  columns: (2fr, 2fr, 1fr),
   table.header([*Test*], [*Modelo*], [*Dimensión de calidad*]),
-  [`unique` + `not_null`],                       [`fct_accidentes.id`],         [Unicidad / completitud],
-  [`expect_column_values_to_be_between`],        [`stg_accidentes.mortos`],     [Validez: rango 0–100],
-  [`expect_column_values_to_be_between`],        [`stg_accidentes.latitude`],   [Validez: rango -34 a 6],
-  [`expect_column_values_to_not_be_null`],       [`stg_accidentes.uf`],         [Completitud],
-  [`expect_column_proportion_of_unique_values`], [`stg_accidentes.municipio`],  [Consistencia: >100 municipios distintos],
-  [`expect_column_values_to_match_regex`],       [`stg_accidentes.data_inversa`],[Formato fecha YYYY-MM-DD],
+  [#dbt("unique") + #dbt("not_null")],                       [#dbt("fct_accidentes.id")],          [Unicidad / completitud],
+  [#dbt("expect_column_values_to_be_between")],              [#dbt("stg_accidentes.mortos")],      [Validez: rango 0–100],
+  [#dbt("expect_column_values_to_be_between")],              [#dbt("stg_accidentes.latitude")],    [Validez: rango -34 a 6],
+  [#dbt("expect_column_values_to_not_be_null")],             [#dbt("stg_accidentes.uf")],          [Completitud],
+  [#dbt("expect_column_proportion_of_unique_values")],       [#dbt("stg_accidentes.municipio")],   [Consistencia: >100 municipios],
+  [#dbt("expect_column_values_to_match_regex")],             [#dbt("stg_accidentes.data_inversa")],[Formato YYYY-MM-DD],
 )
 
 == Paso 5: Orquestación con Prefect
