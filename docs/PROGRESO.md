@@ -96,7 +96,7 @@ Candidatos para dimensiones:
 | Airbyte — source Open-Meteo (clima_raw) | 🔄 En progreso | Script `extract_openmeteo.py` listo, pendiente ejecución y sync |
 | Prefect pipeline | 🔄 En progreso | `workspaces/prefect/pipeline.py` creado, pendiente ejecución |
 | Reporte técnico (Typst) | 🔄 En progreso | Pasos 1–5 documentados, pendiente resultados finales |
-| Definición del modelo dimensional | 🔄 En progreso | Candidatos definidos, pendiente implementación dbt |
+| Definición del modelo dimensional | ✅ Listo | OBT elegido: staging → intermediate (join) → marts/obt_accidentes |
 | dbt modelos staging | ⏳ Pendiente | — |
 | dbt modelos marts | ⏳ Pendiente | — |
 | dbt tests (dbt-expectations) | ⏳ Pendiente | — |
@@ -148,10 +148,11 @@ Candidatos para dimensiones:
 
 - [ ] Proyecto dbt inicializado, `profiles.yml` apuntando a `md:airbyte_trabajo`
 - [ ] `sources.yml` con database y schema correctos
-- [ ] `stg_accidentes`: `NULLIF`, `REPLACE` comas decimales, `CAST` de tipos
-- [ ] `stg_clima_openmeteo`: tipado directo, decodificación WMO
-- [ ] Modelo dimensional (estrella Kimball) implementado
-- [ ] Materializations definidos: `view` en staging, `table` en marts
+- [ ] `stg_accidentes`: `NULLIF`, `REPLACE` comas decimales, `CAST` de tipos, columnas `lat_r`/`lon_r`
+- [ ] `stg_clima`: tipado directo, decodificación WMO, columnas join `lat_r`/`lon_r`/`fecha`/`hora`
+- [ ] `int_accidentes_clima`: join por `(lat_r, lon_r, data_inversa, hora)`
+- [ ] `obt_accidentes`: tabla ancha final (OBT) en marts
+- [ ] Materializations: `view` en staging/intermediate, `table` en marts
 - [ ] `dbt run` sin errores
 
 ### 3. Calidad de Datos con Testing — 15 pts

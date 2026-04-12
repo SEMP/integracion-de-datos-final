@@ -1,0 +1,71 @@
+// ============================================================
+// 01_staging.dbml — Modelos staging del pipeline dbt
+// Pegar en https://dbdiagram.io
+//
+// Representa las dos tablas staging que limpian y tipan
+// los datos raw sincronizados por Airbyte desde MySQL.
+// ============================================================
+
+Table stg_accidentes {
+  id                     bigint      [pk, note: "Identificador único del accidente"]
+  data_inversa           date        [not null]
+  dia_semana             varchar
+  horario                time        [not null]
+  uf                     varchar     [not null, note: "Estado brasileño (2 letras)"]
+  br                     varchar     [note: "Número de ruta federal"]
+  km                     decimal
+  municipio              varchar
+  causa_acidente         varchar
+  tipo_acidente          varchar
+  classificacao_acidente varchar     [note: "Sem Vítimas / Com Vítimas / Com Mortos"]
+  fase_dia               varchar     [note: "Pleno dia / Anoitecer / Plena Noite / Amanhecer"]
+  sentido_via            varchar
+  condicao_metereologica varchar     [note: "Condición registrada por el agente PRF"]
+  tipo_pista             varchar
+  tracado_via            varchar     [note: "Puede contener múltiples valores (Aclive;Reta)"]
+  uso_solo               varchar
+  pessoas                int
+  mortos                 int
+  feridos_leves          int
+  feridos_graves         int
+  ilesos                 int
+  ignorados              int
+  feridos                int
+  veiculos               int
+  latitude               double      [note: "Coordenada GPS del accidente"]
+  longitude              double
+  lat_r                  double      [note: "ROUND(latitude, 2) — clave de join con clima"]
+  lon_r                  double      [note: "ROUND(longitude, 2) — clave de join con clima"]
+  regional               varchar
+  delegacia              varchar
+  uop                    varchar
+}
+
+Table stg_clima {
+  lat_r          double    [note: "Latitud redondeada a 2 decimales (~1km)"]
+  lon_r          double    [note: "Longitud redondeada a 2 decimales (~1km)"]
+  timestamp_utc  timestamp [note: "Timestamp horario ERA5 (America/Sao_Paulo)"]
+  fecha          date      [note: "DATE(timestamp_utc) — clave de join"]
+  hora           int       [note: "HOUR(timestamp_utc) — clave de join"]
+
+  // Variables ERA5 Open-Meteo
+  precipitation         double  [note: "mm/h"]
+  weather_code          int     [note: "Código WMO estándar"]
+  weather_desc          varchar [note: "Descripción decodificada del código WMO"]
+  temperature_2m        double  [note: "°C a 2m de altura"]
+  relative_humidity_2m  double  [note: "% humedad relativa"]
+  dew_point_2m          double  [note: "°C punto de rocío — riesgo escarcha/niebla"]
+  cloud_cover_low       int     [note: "% cobertura nubes bajas (proxy niebla)"]
+  wind_speed_10m        double  [note: "km/h velocidad viento a 10m"]
+  wind_gusts_10m        double  [note: "km/h ráfagas de viento a 10m"]
+  shortwave_radiation   double  [note: "W/m² — riesgo encandilamiento solar"]
+  is_day                boolean [note: "true = día, false = noche"]
+
+  indexes {
+    (lat_r, lon_r, fecha, hora) [name: "idx_clima_join"]
+  }
+}
+
+// Relación de join (no es FK real — join por coordenadas redondeadas)
+// stg_accidentes.lat_r, lon_r, data_inversa, HOUR(horario)
+// stg_clima.lat_r, lon_r, fecha, hora

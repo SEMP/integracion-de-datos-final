@@ -1,0 +1,205 @@
+// ============================================================
+// 03_pipeline_completo.dbml — Vista completa del pipeline dbt
+// Pegar en https://dbdiagram.io
+//
+// Muestra todas las capas: raw → staging → intermediate → marts
+// ============================================================
+
+// ---- RAW (sincronizadas por Airbyte desde MySQL) ----
+
+Table accidentes_raw {
+  id                     varchar
+  data_inversa           varchar
+  dia_semana             varchar
+  horario                varchar
+  uf                     varchar
+  br                     varchar
+  km                     varchar  [note: "Decimal con coma: -7,291548"]
+  municipio              varchar
+  causa_acidente         varchar
+  tipo_acidente          varchar
+  classificacao_acidente varchar  [note: "Puede ser 'NA'"]
+  fase_dia               varchar
+  sentido_via            varchar
+  condicao_metereologica varchar
+  tipo_pista             varchar
+  tracado_via            varchar
+  uso_solo               varchar
+  pessoas                varchar
+  mortos                 varchar
+  feridos_leves          varchar
+  feridos_graves         varchar
+  ilesos                 varchar
+  ignorados              varchar
+  feridos                varchar
+  veiculos               varchar
+  latitude               varchar  [note: "Decimal con coma: -7,291548"]
+  longitude              varchar
+  regional               varchar
+  delegacia              varchar
+  uop                    varchar
+
+  note: "Raw — todo TEXT. Schema: datatran (MotherDuck)"
+}
+
+Table clima_raw {
+  latitude              varchar
+  longitude             varchar
+  timestamp             varchar
+  precipitation         varchar
+  weather_code          varchar
+  temperature_2m        varchar
+  relative_humidity_2m  varchar
+  dew_point_2m          varchar
+  cloud_cover_low       varchar
+  wind_speed_10m        varchar
+  wind_gusts_10m        varchar
+  shortwave_radiation   varchar
+  is_day                varchar
+
+  note: "Raw — todo TEXT. Schema: datatran (MotherDuck)"
+}
+
+// ---- STAGING (views, schema: staging) ----
+
+Table stg_accidentes {
+  id                     bigint   [pk]
+  data_inversa           date
+  dia_semana             varchar
+  horario                time
+  uf                     varchar
+  br                     varchar
+  km                     decimal
+  municipio              varchar
+  causa_acidente         varchar
+  tipo_acidente          varchar
+  classificacao_acidente varchar
+  fase_dia               varchar
+  sentido_via            varchar
+  condicao_metereologica varchar
+  tipo_pista             varchar
+  tracado_via            varchar
+  uso_solo               varchar
+  pessoas                int
+  mortos                 int
+  feridos_leves          int
+  feridos_graves         int
+  ilesos                 int
+  ignorados              int
+  feridos                int
+  veiculos               int
+  latitude               double
+  longitude              double
+  lat_r                  double   [note: "ROUND(latitude,2)"]
+  lon_r                  double   [note: "ROUND(longitude,2)"]
+  regional               varchar
+  delegacia              varchar
+  uop                    varchar
+
+  note: "View. Schema: staging"
+}
+
+Table stg_clima {
+  lat_r                  double
+  lon_r                  double
+  timestamp_utc          timestamp
+  fecha                  date
+  hora                   int
+  precipitation          double
+  weather_code           int
+  weather_desc           varchar
+  temperature_2m         double
+  relative_humidity_2m   double
+  dew_point_2m           double
+  cloud_cover_low        int
+  wind_speed_10m         double
+  wind_gusts_10m         double
+  shortwave_radiation    double
+  is_day                 boolean
+
+  note: "View. Schema: staging"
+}
+
+// ---- INTERMEDIATE (view, schema: intermediate) ----
+
+Table int_accidentes_clima {
+  id                          bigint   [pk, ref: > stg_accidentes.id]
+  data_inversa                date
+  horario                     time
+  uf                          varchar
+  municipio                   varchar
+  causa_acidente              varchar
+  mortos                      int
+  feridos                     int
+  veiculos                    int
+  latitude                    double
+  longitude                   double
+  condicao_metereologica      varchar
+  // ... demás campos de stg_accidentes ...
+  clima_precipitation         double
+  clima_weather_code          int
+  clima_weather_desc          varchar
+  clima_temperature_2m        double
+  clima_relative_humidity_2m  double
+  clima_dew_point_2m          double
+  clima_cloud_cover_low       int
+  clima_wind_speed_10m        double
+  clima_wind_gusts_10m        double
+  clima_shortwave_radiation   double
+  clima_is_day                boolean
+  clima_join_match            boolean
+
+  note: "View. LEFT JOIN stg_accidentes + stg_clima por (lat_r, lon_r, fecha, hora). Schema: intermediate"
+}
+
+// ---- MARTS (table, schema: marts) ----
+
+Table obt_accidentes {
+  id                          bigint   [pk, ref: > int_accidentes_clima.id]
+  data_inversa                date
+  dia_semana                  varchar
+  horario                     time
+  fase_dia                    varchar
+  uf                          varchar
+  municipio                   varchar
+  br                          varchar
+  km                          decimal
+  latitude                    double
+  longitude                   double
+  causa_acidente              varchar
+  tipo_acidente               varchar
+  classificacao_acidente      varchar
+  sentido_via                 varchar
+  tipo_pista                  varchar
+  tracado_via                 varchar
+  uso_solo                    varchar
+  pessoas                     int
+  mortos                      int
+  feridos_leves               int
+  feridos_graves              int
+  ilesos                      int
+  ignorados                   int
+  feridos                     int
+  veiculos                    int
+  condicao_metereologica      varchar
+  clima_precipitation         double
+  clima_weather_code          int
+  clima_weather_desc          varchar
+  clima_temperature_2m        double
+  clima_relative_humidity_2m  double
+  clima_dew_point_2m          double
+  clima_cloud_cover_low       int
+  clima_wind_speed_10m        double
+  clima_wind_gusts_10m        double
+  clima_shortwave_radiation   double
+  clima_is_day                boolean
+  clima_join_match            boolean
+
+  note: "TABLE. OBT final consumido por Metabase. Schema: marts"
+}
+
+// ---- Referencias de flujo de datos ----
+Ref: stg_accidentes.id < accidentes_raw.id [note: "source()"]
+Ref: stg_clima.lat_r < clima_raw.latitude  [note: "source()"]
+Ref: int_accidentes_clima.id > stg_accidentes.id [note: "ref()"]
+Ref: obt_accidentes.id > int_accidentes_clima.id [note: "ref()"]

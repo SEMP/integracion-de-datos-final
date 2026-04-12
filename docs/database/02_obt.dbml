@@ -1,0 +1,77 @@
+// ============================================================
+// 02_obt.dbml — Modelo OBT final (marts/obt_accidentes)
+// Pegar en https://dbdiagram.io
+//
+// Una fila por accidente con todos los atributos de DATATRAN
+// más las variables ERA5 del momento y lugar del siniestro.
+// Materializado como TABLE en MotherDuck schema "marts".
+// ============================================================
+
+Table obt_accidentes {
+  // --- Identificación ---
+  id                     bigint   [pk, note: "ID único del accidente (DATATRAN)"]
+  data_inversa           date     [not null]
+  dia_semana             varchar
+  horario                time
+  fase_dia               varchar  [note: "Pleno dia / Anoitecer / Plena Noite / Amanhecer"]
+
+  // --- Localización ---
+  uf                     varchar  [not null, note: "Estado (UF)"]
+  municipio              varchar
+  br                     varchar  [note: "Número de ruta federal"]
+  km                     decimal
+  latitude               double
+  longitude              double
+
+  // --- Causa y tipo ---
+  causa_acidente         varchar
+  tipo_acidente          varchar
+  classificacao_acidente varchar
+
+  // --- Características de la vía ---
+  sentido_via            varchar
+  tipo_pista             varchar
+  tracado_via            varchar
+  uso_solo               varchar
+
+  // --- Víctimas y vehículos ---
+  pessoas                int
+  mortos                 int
+  feridos_leves          int
+  feridos_graves         int
+  ilesos                 int
+  ignorados              int
+  feridos                int
+  veiculos               int
+
+  // --- Clima registrado por PRF ---
+  condicao_metereologica varchar  [note: "Condición subjetiva del agente PRF"]
+
+  // --- Clima ERA5 (Open-Meteo) ---
+  clima_precipitation         double   [note: "mm/h — precipitación horaria ERA5"]
+  clima_weather_code          int      [note: "Código WMO estándar"]
+  clima_weather_desc          varchar  [note: "Descripción del código WMO"]
+  clima_temperature_2m        double   [note: "°C"]
+  clima_relative_humidity_2m  double   [note: "%"]
+  clima_dew_point_2m          double   [note: "°C — riesgo de escarcha o niebla"]
+  clima_cloud_cover_low       int      [note: "% nubes bajas — proxy de niebla"]
+  clima_wind_speed_10m        double   [note: "km/h"]
+  clima_wind_gusts_10m        double   [note: "km/h — ráfagas"]
+  clima_shortwave_radiation   double   [note: "W/m² — encandilamiento solar"]
+  clima_is_day                boolean  [note: "true=día, false=noche según ERA5"]
+  clima_join_match            boolean  [note: "true si se encontró dato ERA5 para el accidente"]
+
+  indexes {
+    id          [name: "pk_obt"]
+    data_inversa [name: "idx_fecha"]
+    uf          [name: "idx_uf"]
+    causa_acidente [name: "idx_causa"]
+  }
+
+  note: '''
+    OBT materializado como TABLE en MotherDuck (schema: marts).
+    Origen: int_accidentes_clima (LEFT JOIN stg_accidentes + stg_clima).
+    Join key: (ROUND(latitude,2), ROUND(longitude,2), data_inversa, HOUR(horario)).
+    clima_join_match=false indica accidentes sin cobertura ERA5 (coordenadas no disponibles).
+  '''
+}

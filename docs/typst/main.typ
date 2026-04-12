@@ -305,7 +305,7 @@ La verificación en MotherDuck confirma que los datos quedaron disponibles en `d
 
 == Paso 4: Modelos dbt
 
-El proyecto dbt en `workspaces/dbt_proyecto/` transforma los datos crudos en dos capas.
+El proyecto dbt en `workspaces/dbt_proyecto/` transforma los datos crudos en tres capas.
 
 === Configuración
 
@@ -315,7 +315,7 @@ dbt_datatran:
   outputs:
     dev:
       type: duckdb
-      path: "md:airbyte_curso"
+      path: "md:airbyte_trabajo"
       schema: datatran
       motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
   target: dev
@@ -328,6 +328,9 @@ models:
     staging:
       +materialized: view
       +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
     marts:
       +materialized: table
       +schema: marts
@@ -343,42 +346,57 @@ Los modelos staging aplican las transformaciones de tipo que no se pudieron hace
   [`stg_accidentes`],
   [
     `NULLIF(campo, 'NA')` para nulos literales;\
-    `REPLACE(latitude, ',', '.')::DOUBLE`;\
+    `REPLACE(latitude, ',', '.')::DOUBLE` y `longitude`;\
     `REPLACE(km, ',', '.')::DECIMAL`;\
     `CAST(id AS BIGINT)`, `CAST(mortos AS INT)` y demás enteros;\
-    `CAST(data_inversa AS DATE)`, `CAST(horario AS TIME)`
+    `CAST(data_inversa AS DATE)`, `CAST(horario AS TIME)`;\
+    Columnas de join: `lat_r` y `lon_r` (`ROUND(latitude, 2)`)
   ],
-  [`stg_clima_openmeteo`],
+  [`stg_clima`],
   [
     Tipado directo (ERA5 ya entrega datos numéricos);\
+    `CAST(timestamp AS TIMESTAMP)`;\
     Decodificación de `weather_code` WMO a descripción legible;\
-    Join key: `accidente_id` (lat + lon + fecha + hora)
+    Columnas de join: `lat_r`, `lon_r`, `fecha`, `hora` extraídos del timestamp
   ],
 )
 
-=== Modelo dimensional
+=== Modelo intermedio
 
-Se implementa un esquema en estrella (Kimball) con las siguientes entidades:
+```
+int_accidentes_clima.sql
+```
+
+Join entre `stg_accidentes` y `stg_clima` por `(lat_r, lon_r, data_inversa, HOUR(horario))`. Resultado: una fila por accidente con las variables ERA5 correspondientes al momento y lugar del siniestro.
+
+=== Modelo OBT
+
+Se implementa un *One Big Table* (OBT) en lugar de esquema estrella. La justificación es:
+
+- El dataset tiene ~11.380 filas — volumen donde la normalización Kimball agrega complejidad sin beneficio de rendimiento en DuckDB/MotherDuck.
+- El análisis es exploratorio: Metabase necesita filtrar y agrupar por múltiples dimensiones simultáneamente, lo que resulta más directo con una tabla ancha que con joins en tiempo de consulta.
+- La integración de ERA5 ya introduce complejidad suficiente en la capa intermedia.
 
 #table(
-  columns: (auto, 1fr),
-  table.header([*Tabla*], [*Descripción*]),
-  [`dim_fecha`],     [Fecha, día de la semana, fase del día, mes, año],
-  [`dim_ubicacion`], [UF, municipio, BR, km, latitud, longitud],
-  [`dim_causa`],     [Causa del accidente, tipo, clasificación],
-  [`dim_via`],       [Tipo de pista, trazado, sentido, uso del suelo],
-  [`dim_clima`],     [Condición PRF + variables ERA5: precipitación, temperatura, código WMO],
-  [`fct_accidentes`],[Tabla de hechos: víctimas, vehículos, FK a todas las dimensiones],
+  columns: (auto, auto, 1fr),
+  table.header([*Grupo*], [*Columnas*], [*Origen*]),
+  [Identificación],  [`id`, `data_inversa`, `horario`, `dia_semana`, `fase_dia`],          [DATATRAN],
+  [Localización],    [`uf`, `municipio`, `br`, `km`, `latitude`, `longitude`],              [DATATRAN],
+  [Causa y tipo],    [`causa_acidente`, `tipo_acidente`, `classificacao_acidente`],          [DATATRAN],
+  [Vía],             [`sentido_via`, `tipo_pista`, `tracado_via`, `uso_solo`],              [DATATRAN],
+  [Víctimas],        [`mortos`, `feridos_leves`, `feridos_graves`, `ilesos`, `veiculos`],   [DATATRAN],
+  [Clima PRF],       [`condicao_metereologica`],                                             [DATATRAN],
+  [Clima ERA5],      [`precipitation`, `weather_code`, `weather_desc`, `temperature_2m`,\
+                      `relative_humidity_2m`, `dew_point_2m`, `cloud_cover_low`,\
+                      `wind_speed_10m`, `wind_gusts_10m`, `shortwave_radiation`, `is_day`], [Open-Meteo],
 )
-
-La elección de Kimball sobre OBT se justifica por la presencia de dimensiones de alta cardinalidad (`dim_ubicacion` con ~500 municipios, `dim_causa` con ~40 causas distintas) que se benefician de la normalización para evitar redundancia y facilitar el filtrado en Metabase.
 
 === Tests de calidad (dbt-expectations)
 
 #table(
   columns: (2fr, 2fr, 1fr),
   table.header([*Test*], [*Modelo*], [*Dimensión de calidad*]),
-  [#dbt("unique") + #dbt("not_null")],                       [#dbt("fct_accidentes.id")],          [Unicidad / completitud],
+  [#dbt("unique") + #dbt("not_null")],                       [#dbt("obt_accidentes.id")],          [Unicidad / completitud],
   [#dbt("expect_column_values_to_be_between")],              [#dbt("stg_accidentes.mortos")],      [Validez: rango 0–100],
   [#dbt("expect_column_values_to_be_between")],              [#dbt("stg_accidentes.latitude")],    [Validez: rango -34 a 6],
   [#dbt("expect_column_values_to_not_be_null")],             [#dbt("stg_accidentes.uf")],          [Completitud],
