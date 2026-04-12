@@ -92,13 +92,14 @@ Candidatos para dimensiones:
 | Infraestructura Docker | ✅ Listo | `tf-mysql`, `tf-phpmyadmin`, `tf-metabase` operativos |
 | Carga MySQL | ✅ Listo | 11.380 registros en `datatran.accidentes_raw` verificados |
 | Metabase — conexión MotherDuck | ✅ Listo | `md:airbyte_trabajo`, driver DuckDB configurado |
-| Reporte técnico (Typst) | 🔄 En progreso | Secciones 1–6 redactadas, pendiente resultados finales |
-| Definición del modelo dimensional | 🔄 En progreso | Candidatos definidos, pendiente implementación |
-| Airbyte connections | ⏳ Pendiente | — |
+| Airbyte — source MySQL + destination MotherDuck | ✅ Listo | `MySQL_Datatran → MotherDuck_datatran`, 11.380 registros sincronizados |
+| Airbyte — source Open-Meteo (clima_raw) | 🔄 En progreso | Script `extract_openmeteo.py` listo, pendiente ejecución y sync |
+| Prefect pipeline | 🔄 En progreso | `workspaces/prefect/pipeline.py` creado, pendiente ejecución |
+| Reporte técnico (Typst) | 🔄 En progreso | Pasos 1–5 documentados, pendiente resultados finales |
+| Definición del modelo dimensional | 🔄 En progreso | Candidatos definidos, pendiente implementación dbt |
 | dbt modelos staging | ⏳ Pendiente | — |
 | dbt modelos marts | ⏳ Pendiente | — |
 | dbt tests (dbt-expectations) | ⏳ Pendiente | — |
-| Prefect pipeline | ⏳ Pendiente | — |
 | Metabase dashboard | ⏳ Pendiente | Conexión lista, faltan visualizaciones |
 | Video presentación | ⏳ Pendiente | — |
 
@@ -120,16 +121,18 @@ Candidatos para dimensiones:
 
 | Criterio | Pts | Estado |
 |---|---|---|
-| Al menos 2 fuentes de datos configuradas correctamente | 5 | ⏳ Pendiente |
-| Conexión al Data Warehouse (MotherDuck) funcionando | 4 | ⏳ Pendiente |
-| Todas las tablas necesarias sincronizadas | 4 | ⏳ Pendiente |
-| Sync mode apropiado para el caso de uso | 2 | ⏳ Pendiente |
+| Al menos 2 fuentes de datos configuradas correctamente | 5 | 🔄 En progreso |
+| Conexión al Data Warehouse (MotherDuck) funcionando | 4 | ✅ Listo |
+| Todas las tablas necesarias sincronizadas | 4 | 🔄 En progreso |
+| Sync mode apropiado para el caso de uso | 2 | ✅ Listo |
 
-- [ ] Source MySQL (`datatran.accidentes_raw`) configurado en Airbyte
-- [ ] Source Open-Meteo ERA5 configurado (script de extracción o Custom Connector)
-- [ ] Destination MotherDuck (`md:airbyte_trabajo`) configurado
-- [ ] Connections creadas y sync completado
-- [ ] Sync mode elegido y justificado (Full Refresh para dataset estático 2026)
+- [x] Source MySQL (`MySQL_Datatran`, base `tf-datatran`) configurado en Airbyte
+- [x] Destination MotherDuck (`MotherDuck_datatran`, `md:airbyte_trabajo`, schema `datatran`) configurado
+- [x] Connection `MySQL_Datatran → MotherDuck_datatran` creada y sync exitoso (11.380 registros, 2m 5s)
+- [x] Sync mode: Full Refresh | Overwrite justificado (dataset estático, sin columnas de timestamp)
+- [ ] Script `extract_openmeteo.py` ejecutado → `data/clima_openmeteo.csv` generado
+- [ ] Tabla `clima_raw` cargada en MySQL y segundo stream agregado a la connection Airbyte
+- [ ] Sync final con ambas tablas (`accidentes_raw` + `clima_raw`) completado
 
 ### 2. Modelado y Transformación con dbt — 25 pts
 
@@ -171,16 +174,19 @@ Candidatos para dimensiones:
 
 | Criterio | Pts | Estado |
 |---|---|---|
-| Pipeline definido con decoradores `@flow` y `@task` | 3 | ⏳ Pendiente |
-| Integración con Airbyte (API o SDK) | 4 | ⏳ Pendiente |
-| Integración con dbt (`prefect-dbt`) | 3 | ⏳ Pendiente |
-| Manejo de errores y logging apropiado | 2 | ⏳ Pendiente |
+| Pipeline definido con decoradores `@flow` y `@task` | 3 | 🔄 En progreso |
+| Integración con Airbyte (API o SDK) | 4 | 🔄 En progreso |
+| Integración con dbt (`prefect-dbt`) | 3 | 🔄 En progreso |
+| Manejo de errores y logging apropiado | 2 | 🔄 En progreso |
 
-- [ ] Flow `datatran_pipeline` con tasks: `extract_and_load` + `transform_with_dbt` + `test_with_dbt`
-- [ ] Task Airbyte: polling via API REST hasta completar sync
-- [ ] Task dbt: usando `prefect-dbt`
-- [ ] Try/except con logging en cada task
-- [ ] Ejecución exitosa en Prefect UI (captura de pantalla)
+- [x] `workspaces/prefect/pipeline.py` creado con 7 tasks usando `@flow` y `@task`
+- [x] Task `airbyte_sync`: dispara sync vía API REST y hace polling cada 10 s
+- [x] Tasks `dbt_run` y `dbt_test`: ejecutan dbt como subproceso con logging
+- [x] Manejo de errores con `raise RuntimeError` y logging en cada task
+- [x] Task `ensure_containers_up`: levanta Docker y espera MySQL ready
+- [x] Task `verify_accidentes_raw`: verifica datos y corre initdb si es necesario
+- [ ] Configurar `workspaces/prefect/.env` con `AIRBYTE_CONNECTION_ID`
+- [ ] Ejecución exitosa end-to-end (captura de Prefect UI)
 
 ### 5. Visualización con Metabase — 15 pts
 
@@ -230,14 +236,14 @@ Candidatos para dimensiones:
 
 | Componente | Pts máx | Obtenido |
 |---|---|---|
-| 1. Extracción (Airbyte) | 15 | — |
+| 1. Extracción (Airbyte) | 15 | ~10 (source+dest+sync ✅, falta clima_raw) |
 | 2. Modelado y Transformación (dbt) | 25 | — |
 | 3. Calidad de Datos (Testing) | 15 | — |
-| 4. Orquestación (Prefect) | 12 | — |
+| 4. Orquestación (Prefect) | 12 | ~8 (pipeline creado, falta ejecución) |
 | 5. Visualización (Metabase) | 15 | 2 (conexión ✅) |
-| 6. Reporte Técnico | 10 | — |
+| 6. Reporte Técnico | 10 | ~5 (pasos 1–5 documentados) |
 | 7. Video Explicativo | 8 | — |
-| **TOTAL** | **100** | **2** |
+| **TOTAL** | **100** | **~25** |
 
 ---
 

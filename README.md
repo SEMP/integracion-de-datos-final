@@ -184,20 +184,48 @@ docker exec -it tf-mysql mysql -u airbyte -pairbyte datatran \
 
 ### Paso 5 — Configurar Airbyte
 
-1. **Source MySQL:**
-   - Host: `localhost`, Puerto: `3306` (o el valor de `MYSQL_PORT`)
-   - Base de datos: `datatran`
-   - Usuario / Contraseña: los definidos en `.env`
-   - Tabla a sincronizar: `accidentes_raw`
-   - Sync mode: **Full Refresh** (dataset estático de 2026)
+1. **Source MySQL** (`MySQL_Datatran`):
+   - Host: IP ZeroTier de la máquina con Docker (estable, no cambia)
+   - Puerto: `3306`, Base de datos: `tf-datatran`, Usuario: `airbyte`
+   - Encryption: `required`, SSH Tunnel: `No Tunnel`
+   - Update Method: `Scan Changes with User Defined Cursor`
 
-2. **Source Open-Meteo ERA5** (pendiente — script de extracción o Custom Connector)
+2. **Destination MotherDuck** (`MotherDuck_datatran`):
+   - MotherDuck Access Token: token de tu cuenta
+   - Destination DB: `md:airbyte_trabajo`, Schema Name: `datatran`
 
-3. **Destination MotherDuck:**
-   - Token: el de tu cuenta MotherDuck
-   - Database: `datatran_dw`
+3. **Connection**: `MySQL_Datatran → MotherDuck_datatran`
+   - Schedule: `Manual` (Prefect dispara el sync)
+   - Namespace: `Destination-defined`
+   - Stream `accidentes_raw`: sync mode **Full Refresh | Overwrite**
 
-### Paso 6 — dbt: transformaciones y tests
+### Paso 6 — Extraer datos climáticos Open-Meteo ERA5
+
+```bash
+# Agregar credenciales MySQL al .env del script
+cp workspaces/scripts/example.env workspaces/scripts/.env
+# Editar workspaces/scripts/.env con MYSQL_PASSWORD
+
+python3 workspaces/scripts/extract_openmeteo.py
+# ~200 requests, ~5-10 min. Soporta reanudación si se interrumpe.
+# Salida: data/clima_openmeteo.csv
+```
+
+Luego cargar en MySQL:
+
+```bash
+docker exec -i tf-mysql mysql -uairbyte -p<PASSWORD> datatran \
+  < workspaces/containers/initdb/03_clima_schema.sql
+
+docker exec tf-mysql mysql -uairbyte -p<PASSWORD> datatran -e \
+  "LOAD DATA INFILE '/csv/clima_openmeteo.csv' INTO TABLE clima_raw \
+   CHARACTER SET utf8mb4 FIELDS TERMINATED BY ';' ENCLOSED BY '\"' \
+   LINES TERMINATED BY '\n' IGNORE 1 LINES;"
+```
+
+Agregar `clima_raw` como segundo stream en la connection Airbyte y ejecutar un nuevo sync.
+
+### Paso 7 — dbt: transformaciones y tests
 
 ```bash
 cd workspaces/dbt_proyecto
@@ -206,22 +234,32 @@ dbt run
 dbt test
 ```
 
-Transformaciones que aplica dbt sobre `accidentes_raw`:
-- `NULLIF(campo, 'NA')` para nulos literales
-- `REPLACE(km, ',', '.')::DECIMAL` para decimales con coma
-- `REPLACE(latitude, ',', '.')::DOUBLE` y `longitude`
-- `CAST(id AS BIGINT)`, `CAST(mortos AS INT)`, etc.
-- `CAST(data_inversa AS DATE)`, `CAST(horario AS TIME)`
+### Paso 8 — Prefect: orquestación del pipeline completo
 
-### Paso 7 — Prefect: orquestación
+El pipeline en `workspaces/prefect/pipeline.py` automatiza todos los pasos anteriores:
 
 ```bash
 cd workspaces/prefect
-prefect server start &
+cp example.env .env
+# Editar .env: MYSQL_PASSWORD, AIRBYTE_CONNECTION_ID
+# (AIRBYTE_CONNECTION_ID: Airbyte UI → Connections → Settings → Connection ID)
+
+pip install prefect mysql-connector-python
+
+prefect server start &    # UI en http://localhost:4200
 python pipeline.py
 ```
 
-### Paso 8 — Metabase: dashboard
+Tareas del pipeline en orden:
+1. `ensure_containers_up` — `docker compose up -d` + espera MySQL
+2. `verify_accidentes_raw` — verifica datos; corre initdb automáticamente si está vacío
+3. `extract_openmeteo` — extrae ERA5 y genera `data/clima_openmeteo.csv`
+4. `load_clima_raw` — crea tabla y carga el CSV en MySQL
+5. `airbyte_sync` — dispara sync y polling hasta completar
+6. `dbt_run` — `dbt deps` + `dbt run`
+7. `dbt_test` — `dbt test`
+
+### Paso 9 — Metabase: dashboard
 
 Abrir `http://localhost:3000`, completar el setup inicial y agregar la base de datos:
 

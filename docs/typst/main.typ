@@ -388,25 +388,45 @@ La elección de Kimball sobre OBT se justifica por la presencia de dimensiones d
 
 == Paso 5: Orquestación con Prefect
 
-El pipeline se orquesta con Prefect 3, coordinando las tres etapas en secuencia:
+El pipeline se orquesta con Prefect 3 desde `workspaces/prefect/pipeline.py`. Cubre las 7 etapas del pipeline de extremo a extremo, incluyendo la gestión de la infraestructura Docker y la verificación de datos antes de cada transformación.
 
 === Estructura del pipeline
 
 ```python
-@flow(name="datatran_pipeline")
+@flow(name="datatran_pipeline", log_prints=True)
 def datatran_pipeline():
-    extract_and_load()   # Dispara sync Airbyte vía API REST
-    transform_with_dbt() # dbt deps + dbt run
-    test_with_dbt()      # dbt test
+    ensure_containers_up()    # docker compose up -d + espera MySQL
+    verify_accidentes_raw()   # COUNT(*) en MySQL; corre initdb si es necesario
+    extract_openmeteo()       # extrae ERA5 y genera data/clima_openmeteo.csv
+    load_clima_raw()          # crea tabla + LOAD DATA INFILE en MySQL
+    airbyte_sync()            # dispara sync y polling vía API REST
+    dbt_run()                 # dbt deps + dbt run
+    dbt_test()                # dbt test
 ```
 
 #table(
   columns: (auto, auto, 1fr),
   table.header([*Task*], [*Nombre*], [*Descripción*]),
-  [1], [`Extract and Load`],   [Dispara el sync de Airbyte vía API REST y hace polling cada 10s hasta completar. Reintentos: 2],
-  [2], [`Transform with dbt`], [Ejecuta `dbt deps` + `dbt run` como subproceso con `prefect-dbt`],
-  [3], [`Test with dbt`],      [Ejecuta `dbt test` y falla el flow si algún test no pasa],
+  [1], [#dbt("ensure_containers_up")],  [Ejecuta `docker compose up -d` y espera hasta que MySQL acepte conexiones (máx 60 s). Reintentos: 2.],
+  [2], [#dbt("verify_accidentes_raw")], [Verifica que `accidentes_raw` tiene datos. Si está vacía, ejecuta los scripts `01_schema.sql` y `02_load_data.sql` vía `docker exec` y confirma la carga.],
+  [3], [#dbt("extract_openmeteo")],     [Lee coordenadas únicas por fecha desde MySQL, las consulta en lotes de 100 a la API ERA5 de Open-Meteo y escribe `data/clima_openmeteo.csv`. Soporta reanudación. Timeout: 30 min.],
+  [4], [#dbt("load_clima_raw")],        [Crea la tabla `clima_raw` en MySQL (si no existe) y ejecuta `LOAD DATA INFILE`. Saltea la carga si la tabla ya tiene filas.],
+  [5], [#dbt("airbyte_sync")],          [Dispara el sync `MySQL_Datatran → MotherDuck_datatran` vía API REST y hace polling cada 10 s hasta completar o fallar. Timeout: 10 min.],
+  [6], [#dbt("dbt_run")],               [Ejecuta `dbt deps` + `dbt run`. Reintentos: 1.],
+  [7], [#dbt("dbt_test")],              [Ejecuta `dbt test` y falla el flow si algún test no pasa.],
 )
+
+=== Configuración
+
+```bash
+cd workspaces/prefect
+cp example.env .env     # completar MYSQL_PASSWORD y AIRBYTE_CONNECTION_ID
+pip install prefect mysql-connector-python
+prefect server start &
+python pipeline.py
+```
+
+La variable `AIRBYTE_CONNECTION_ID` se obtiene en Airbyte UI → Connections → Settings → Connection ID.
 
 == Paso 6: Visualización con Metabase
 
