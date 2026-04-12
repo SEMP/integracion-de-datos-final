@@ -1,3 +1,6 @@
+# Datos locales — CSV convertidos y archivos de trabajo (no versionar)
+data/
+
 # dbt artifacts
 target/
 dbt_packages/
