@@ -26,11 +26,55 @@ Arquitectura: MySQL -> Airbyte -> MotherDuck -> dbt -> Metabase, orquestado con 
   - `latitude`, `longitude`
 - **Nota de carga:** separador `;`, encoding Latin1 — especificar en `LOAD DATA INFILE`
 
-### Fuente 2: Clima histórico (OpenWeather API)
-- **Origen:** OpenWeather Historical Weather API
-- **Propósito:** Enriquecer accidentes con datos reales de clima (temperatura, lluvia, viento, visibilidad)
-- **Puente con fuente 1:** fecha + coordenadas GPS (latitude/longitude) o municipio/UF
-- **Pendiente:** definir estrategia de extracción (por fecha y ubicación de cada accidente)
+### Fuente 2: Clima histórico (Open-Meteo ERA5) — DECIDIDO
+
+- **Origen:** Open-Meteo Historical Weather API (ERA5 reanalysis)
+- **URL base:** `https://archive-api.open-meteo.com/v1/archive`
+- **Costo:** Gratuito, sin API key
+- **Propósito:** Enriquecer accidentes con datos reales de clima por fecha y coordenadas GPS
+- **Puente con fuente 1:** `data_inversa` + `horario` + `latitude` + `longitude` de cada accidente
+- **Variables a extraer (resolución horaria):**
+
+  | Variable Open-Meteo | Campo destino | Relevancia vial |
+  |---|---|---|
+  | `precipitation` | `precip_mm` | ★★★ Principal |
+  | `weather_code` (WMO) | `cond_wmo`, `cond_desc` | ★★★ Principal |
+  | `temperature_2m` | `temp_c` | ★★ Secundaria |
+  | `relative_humidity_2m` | `humedad_pct` | ★★ Secundaria |
+  | `dew_point_2m` | `dew_point_c` | ★★ Secundaria |
+  | `apparent_temperature` | `sensacion_c` | ★ Contexto |
+  | `surface_pressure` | `presion_hpa` | ★ Contexto |
+  | `cloud_cover` | `nubes_pct` | ★ Contexto |
+  | `cloud_cover_low` | `nubes_bajas_pct` | ★ Contexto (proxy niebla) |
+  | `wind_speed_10m` | `viento_ms` | ★ Contexto |
+  | `wind_gusts_10m` | `rafaga_ms` | ★ Contexto |
+  | `wind_direction_10m` | `viento_dir` | Info |
+  | `shortwave_radiation` | `radiacion_wm2` | ★ Contexto |
+  | `is_day` | `es_dia` | ★★ Secundaria |
+
+- **Nota — visibilidad:** Ninguna de las dos APIs provee `visibility` para datos ERA5/históricos
+  (campo retorna `None` en ambas). Se descarta de la fuente 2; la PRF tiene `condicao_metereologica`
+  como proxy.
+
+#### Decisión: Open-Meteo ERA5 vs OpenWeather One Call 3.0
+
+Ambas APIs fueron probadas contra 5 accidentes reales del dataset DATATRAN 2026
+(ver `Verificaciondesuscripcion_Extracciondedatos.ipynb`). Resultado: 5/5 exitosas en ambas.
+
+| Criterio | Open-Meteo ERA5 | OpenWeather 3.0 |
+|---|---|---|
+| Costo | **Gratuito, sin key** | De pago (suscripción activa) |
+| Cobertura | 5/5 ✅ | 5/5 ✅ |
+| `visibility` | None (no disponible) | None (no disponible) |
+| `wind_gusts` | Disponible ✅ | None para todos los casos |
+| Nubosidad baja | `cloud_cover_low` ✅ | No disponible |
+| Radiación solar | `shortwave_radiation` ✅ | No disponible |
+| Fase del día | `is_day` flag ✅ | Calculado desde sunrise/sunset |
+| Clasificación clima | Códigos WMO estándar | Etiquetas propias |
+
+**Conclusión:** Se elige **Open-Meteo ERA5** por ser gratuito, proveer más variables útiles
+(rafagas, nubes bajas como proxy de niebla, radiación solar) y retornar los mismos resultados
+de cobertura que OpenWeather.
 
 ---
 
@@ -69,7 +113,7 @@ Candidatos para dimensiones:
 - `dim_ubicacion` — UF, municipio, BR (carretera), km, coordenadas
 - `dim_causa` — causa, tipo de accidente, clasificación
 - `dim_via` — tipo de pista, trazado, sentido, uso del suelo
-- `dim_clima` — condición meteorológica (fuente PRF + datos OpenWeather)
+- `dim_clima` — condición meteorológica (fuente PRF + datos Open-Meteo ERA5)
 - `fct_accidentes` — tabla de hechos con víctimas, vehículos, FK a dimensiones
 
 ---
@@ -94,7 +138,7 @@ Candidatos para dimensiones:
 | Sync mode apropiado para el caso de uso | 2 | Pendiente |
 
 - [ ] Source MySQL (accidentes DATATRAN) configurado en Airbyte
-- [ ] Source OpenWeather (o carga directa) configurado en Airbyte
+- [ ] Source Open-Meteo ERA5 (script de extracción o carga directa) configurado en Airbyte
 - [ ] Destination MotherDuck configurado
 - [ ] Connections creadas y sync completado
 - [ ] Sync mode elegido y justificado (full refresh vs incremental)
@@ -113,7 +157,7 @@ Candidatos para dimensiones:
 
 - [ ] Proyecto dbt inicializado, `profiles.yml` apuntando a MotherDuck
 - [ ] `sources.yml` con database y schema correctos
-- [ ] Modelos staging para accidentes (`stg_accidentes`) y clima (`stg_clima`)
+- [ ] Modelos staging para accidentes (`stg_accidentes`) y clima (`stg_clima_openmeteo`)
 - [ ] Modelo dimensional definido y justificado (Kimball vs OBT)
 - [ ] Materializations elegidos y documentados
 - [ ] `dbt run` sin errores
