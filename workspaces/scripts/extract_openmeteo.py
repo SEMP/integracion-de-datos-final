@@ -22,6 +22,7 @@ Dependencias:
 
 import csv
 import json
+import sys
 import time
 import urllib.request
 from collections import defaultdict
@@ -39,9 +40,11 @@ PROGRESS_FILE = DATA_DIR / "clima_openmeteo.progress"  # fechas 100% completadas
 # ---------------------------------------------------------------------------
 # Configuración API
 # ---------------------------------------------------------------------------
-BATCH_SIZE = 100
-DELAY_SEC  = 0.5
-TIMEZONE   = "America%2FSao_Paulo"
+BATCH_SIZE       = 100
+DELAY_SEC        = 2      # pausa base entre requests
+DELAY_429_SEC    = 60     # espera inicial al recibir 429
+MAX_RETRIES_429  = 4      # reintentos máximos por batch ante 429
+TIMEZONE         = "America%2FSao_Paulo"
 
 HOURLY_VARS = [
     "precipitation",
@@ -127,8 +130,11 @@ def fetch_coords_by_date(env: dict) -> dict:
 def call_openmeteo(lats: list, lons: list, date: str) -> list:
     """
     Llama a la API ERA5 de Open-Meteo para un lote de coordenadas en una fecha.
+    Reintenta ante errores 429 con backoff exponencial.
     Devuelve lista de dicts listos para escribir al CSV.
     """
+    import urllib.error
+
     lat_str = ",".join(str(x) for x in lats)
     lon_str = ",".join(str(x) for x in lons)
     hourly  = ",".join(HOURLY_VARS)
@@ -143,8 +149,22 @@ def call_openmeteo(lats: list, lons: list, date: str) -> list:
         f"&timezone={TIMEZONE}"
     )
 
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        data = json.loads(resp.read())
+    wait = DELAY_429_SEC
+    for attempt in range(1, MAX_RETRIES_429 + 2):  # +1 intento inicial
+        try:
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                data = json.loads(resp.read())
+            break  # éxito
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                if attempt > MAX_RETRIES_429:
+                    raise
+                print(f"    429 — esperando {wait}s antes de reintentar (intento {attempt}/{MAX_RETRIES_429})...",
+                      flush=True)
+                time.sleep(wait)
+                wait *= 2  # backoff exponencial: 60 → 120 → 240 → 480
+            else:
+                raise
 
     if isinstance(data, dict):
         data = [data]
@@ -231,9 +251,14 @@ def main():
                 print(f"    WARN: {fecha} quedó incompleta ({batch_errors} batches fallidos)")
 
     completed_now = load_completed_dates()
+    pending = total_dates - len(completed_now)
     print(f"\nListo — {len(completed_now)}/{total_dates} fechas completadas")
     print(f"  CSV:      {OUTPUT_CSV}")
     print(f"  Progress: {PROGRESS_FILE}")
+
+    if pending > 0:
+        print(f"\nATENCION: {pending} fechas pendientes. Volver a ejecutar para completar.")
+        sys.exit(1)   # señaliza al task de Prefect que la extracción está incompleta
 
 
 if __name__ == "__main__":

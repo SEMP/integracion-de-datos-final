@@ -241,7 +241,7 @@ def load_clima_raw():
     if not csv_path.exists():
         raise RuntimeError(f"No se encontró {csv_path}.")
 
-    # Crear tabla
+    # Crear tabla (DROP TABLE IF EXISTS + CREATE) vía docker exec con root
     logger.info("Creando tabla clima_raw...")
     with open(schema_sql, "rb") as f:
         result = subprocess.run(
@@ -252,50 +252,37 @@ def load_clima_raw():
         if result.returncode != 0:
             raise RuntimeError(f"03_clima_schema.sql falló:\n{result.stderr.decode()}")
 
-    # Verificar si ya tiene datos
+    # Verificar si ya tiene datos (por si el pipeline se reintenta)
     con = mysql.connector.connect(
         host=MYSQL_HOST, port=MYSQL_PORT,
         user=MYSQL_USER, password=MYSQL_PASSWORD,
         database=MYSQL_DATABASE,
+        allow_local_infile=True,
     )
     cursor = con.cursor()
     cursor.execute("SELECT COUNT(*) FROM clima_raw")
     count = cursor.fetchone()[0]
-    cursor.close()
-    con.close()
 
     if count > 0:
+        cursor.close()
+        con.close()
         logger.info(f"clima_raw ya tiene {count:,} filas. Saltando LOAD DATA.")
         return count
 
-    # Cargar CSV
-    logger.info("Cargando clima_openmeteo.csv en MySQL...")
-    load_sql = (
-        "LOAD DATA INFILE '/csv/clima_openmeteo.csv' "
-        "INTO TABLE clima_raw "
-        "CHARACTER SET utf8mb4 "
-        "FIELDS TERMINATED BY ';' ENCLOSED BY '\"' "
-        "LINES TERMINATED BY '\\n' "
-        "IGNORE 1 LINES;"
-    )
-    result = subprocess.run(
-        ["docker", "exec", MYSQL_CONTAINER,
-         "mysql", f"-u{MYSQL_USER}", f"-p{MYSQL_PASSWORD}", MYSQL_DATABASE,
-         "-e", load_sql],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"LOAD DATA INFILE falló:\n{result.stderr}")
-
-    # Verificar carga
-    con = mysql.connector.connect(
-        host=MYSQL_HOST, port=MYSQL_PORT,
-        user=MYSQL_USER, password=MYSQL_PASSWORD,
-        database=MYSQL_DATABASE,
-    )
-    cursor = con.cursor()
-    cursor.execute("SELECT COUNT(*) FROM clima_raw")
-    count = cursor.fetchone()[0]
+    # Cargar CSV usando LOCAL INFILE (no requiere privilegio FILE en el server)
+    # El server ya tiene --local-infile=1 configurado en docker-compose.yaml
+    logger.info("Cargando clima_openmeteo.csv en MySQL vía LOCAL INFILE...")
+    load_sql = """
+        LOAD DATA LOCAL INFILE %s
+        INTO TABLE clima_raw
+        CHARACTER SET utf8mb4
+        FIELDS TERMINATED BY ';' ENCLOSED BY '"'
+        LINES TERMINATED BY '\\n'
+        IGNORE 1 LINES
+    """
+    cursor.execute(load_sql, (str(csv_path),))
+    con.commit()
+    count = cursor.rowcount
     cursor.close()
     con.close()
 
