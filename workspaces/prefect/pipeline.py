@@ -192,7 +192,7 @@ def verify_accidentes_raw():
 # Task 3 — Extracción Open-Meteo ERA5
 # ---------------------------------------------------------------------------
 
-@task(name="extract_openmeteo", timeout_seconds=1800)
+@task(name="extract_openmeteo")
 def extract_openmeteo():
     """
     Llama a extract_openmeteo.py, que maneja internamente la reanudación:

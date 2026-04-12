@@ -42,8 +42,8 @@ PROGRESS_FILE = DATA_DIR / "clima_openmeteo.progress"  # fechas 100% completadas
 # ---------------------------------------------------------------------------
 BATCH_SIZE       = 100
 DELAY_SEC        = 2      # pausa base entre requests
-DELAY_429_SEC    = 60     # espera inicial al recibir 429
-MAX_RETRIES_429  = 4      # reintentos máximos por batch ante 429
+DELAY_429_SEC    = 60     # espera fija ante 429 (no crece — máx 60s por reintento)
+MAX_RETRIES_429  = 4      # después de 4 reintentos, abandona el batch y continúa
 TIMEZONE         = "America%2FSao_Paulo"
 
 HOURLY_VARS = [
@@ -149,8 +149,7 @@ def call_openmeteo(lats: list, lons: list, date: str) -> list:
         f"&timezone={TIMEZONE}"
     )
 
-    wait = DELAY_429_SEC
-    for attempt in range(1, MAX_RETRIES_429 + 2):  # +1 intento inicial
+    for attempt in range(1, MAX_RETRIES_429 + 2):  # intento 1 + hasta 4 reintentos
         try:
             with urllib.request.urlopen(url, timeout=30) as resp:
                 data = json.loads(resp.read())
@@ -158,11 +157,10 @@ def call_openmeteo(lats: list, lons: list, date: str) -> list:
         except urllib.error.HTTPError as e:
             if e.code == 429:
                 if attempt > MAX_RETRIES_429:
-                    raise
-                print(f"    429 — esperando {wait}s antes de reintentar (intento {attempt}/{MAX_RETRIES_429})...",
+                    raise  # agotó reintentos → el caller lo captura como WARN
+                print(f"    429 — esperando {DELAY_429_SEC}s (intento {attempt}/{MAX_RETRIES_429})...",
                       flush=True)
-                time.sleep(wait)
-                wait *= 2  # backoff exponencial: 60 → 120 → 240 → 480
+                time.sleep(DELAY_429_SEC)  # espera fija, sin crecer
             else:
                 raise
 
