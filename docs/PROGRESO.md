@@ -74,9 +74,9 @@ Candidatos para dimensiones:
 
 ---
 
-## Checklist de entregables
+## Checklist de entregables (Grilla de Evaluación)
 
-### 0. Infraestructura Docker
+### Infraestructura base (no evaluada directamente)
 - [ ] `docker-compose.yaml` con MySQL 8.0 + phpMyAdmin + Metabase
 - [ ] `initdb/01_schema.sql` — schema de la tabla de accidentes
 - [ ] `initdb/02_load_data.sql` — carga CSV con `LOAD DATA INFILE` (sep `;`, Latin1)
@@ -84,35 +84,123 @@ Candidatos para dimensiones:
 - [ ] `example.env` con todas las variables requeridas
 - [ ] `docker compose up -d` ejecutado y datos verificados
 
-### 1. Airbyte: Connections -> MotherDuck
-- [ ] Source MySQL configurado (accidentes)
-- [ ] Source para OpenWeather o carga directa configurada
+### 1. Extracción con Airbyte — 15 pts
+
+| Criterio | Pts | Estado |
+|---|---|---|
+| Al menos 2 fuentes de datos configuradas correctamente | 5 | Pendiente |
+| Conexión al Data Warehouse (MotherDuck) funcionando | 4 | Pendiente |
+| Todas las tablas necesarias sincronizadas | 4 | Pendiente |
+| Sync mode apropiado para el caso de uso | 2 | Pendiente |
+
+- [ ] Source MySQL (accidentes DATATRAN) configurado en Airbyte
+- [ ] Source OpenWeather (o carga directa) configurado en Airbyte
 - [ ] Destination MotherDuck configurado
 - [ ] Connections creadas y sync completado
+- [ ] Sync mode elegido y justificado (full refresh vs incremental)
 
-### 2. dbt: Modelos staging y marts
-- [ ] Proyecto inicializado, `profiles.yml` configurado
-- [ ] Modelos staging para accidentes y clima
+### 2. Modelado y Transformación con dbt — 25 pts
+
+| Criterio | Pts | Estado |
+|---|---|---|
+| Proyecto dbt estructurado correctamente (staging/, marts/) | 3 | Pendiente |
+| Sources definidos en YAML con database y schema | 2 | Pendiente |
+| Modelos staging con limpieza y tipado de datos | 5 | Pendiente |
+| Modelo dimensional (Kimball) o OBT implementado | 6 | Pendiente |
+| Justificación del enfoque de modelado elegido | 4 | Pendiente |
+| Uso correcto de `ref()` y `source()` para dependencias | 2 | Pendiente |
+| Materializations apropiados (view/table/incremental) | 3 | Pendiente |
+
+- [ ] Proyecto dbt inicializado, `profiles.yml` apuntando a MotherDuck
+- [ ] `sources.yml` con database y schema correctos
+- [ ] Modelos staging para accidentes (`stg_accidentes`) y clima (`stg_clima`)
 - [ ] Modelo dimensional definido y justificado (Kimball vs OBT)
-- [ ] Al menos 5 tests con `dbt-expectations`
+- [ ] Materializations elegidos y documentados
 - [ ] `dbt run` sin errores
+
+### 3. Calidad de Datos con Testing — 15 pts
+
+| Criterio | Pts | Estado |
+|---|---|---|
+| Tests `unique` y `not_null` en primary keys | 3 | Pendiente |
+| Mínimo 5 tests de `dbt-expectations` implementados | 6 | Pendiente |
+| Tests cubren diferentes dimensiones de calidad | 3 | Pendiente |
+| Todos los tests pasan exitosamente | 3 | Pendiente |
+
+- [ ] Tests `unique` + `not_null` en todas las PKs
+- [ ] Al menos 5 tests de `dbt-expectations` (ej: rangos de valores, formatos, distribuciones)
+- [ ] Tests sobre diferentes dimensiones: completitud, unicidad, validez, consistencia
 - [ ] `dbt test` sin errores
 
-### 3. Prefect: Orquestación
-- [ ] Pipeline con tasks: extract_and_load + transform + test_data
-- [ ] Ejecución exitosa en Prefect UI
-- [ ] Captura de ejecución exitosa
+### 4. Orquestación con Prefect — 12 pts
 
-### 4. Metabase: Dashboard
+| Criterio | Pts | Estado |
+|---|---|---|
+| Pipeline definido con decoradores `@flow` y `@task` | 3 | Pendiente |
+| Integración con Airbyte (API o SDK) | 4 | Pendiente |
+| Integración con dbt (`prefect-dbt`) | 3 | Pendiente |
+| Manejo de errores y logging apropiado | 2 | Pendiente |
+
+- [ ] Flow principal con tasks: `extract_and_load` + `transform` + `test_data`
+- [ ] Task de Airbyte usando API o SDK de Airbyte
+- [ ] Task de dbt usando `prefect-dbt`
+- [ ] Try/except con logging en cada task
+- [ ] Ejecución exitosa visible en Prefect UI (captura de pantalla)
+
+### 5. Visualización con Metabase — 15 pts
+
+| Criterio | Pts | Estado |
+|---|---|---|
+| Conexión al Data Warehouse funcionando | 2 | Pendiente |
+| Mínimo 5 visualizaciones implementadas | 5 | Pendiente |
+| Visualizaciones responden preguntas de negocio claras | 4 | Pendiente |
+| Dashboard organizado con filtros interactivos | 4 | Pendiente |
+
 - [ ] Conexión a MotherDuck configurada (campo Motherduck Token separado)
-- [ ] Al menos 5 visualizaciones
-- [ ] Filtros configurados
+- [ ] Al menos 5 visualizaciones con preguntas de negocio definidas
+- [ ] Filtros interactivos configurados (ej: por fecha, estado, tipo de accidente)
+- [ ] Dashboard organizado y con título descriptivo
 - [ ] Captura del dashboard
 
-### 5. Entregables finales
-- [ ] Reporte técnico (Typst)
-- [ ] Video presentación
-- [ ] PDF del reporte
+### 6. Reporte Técnico — 10 pts
+
+| Criterio | Pts | Estado |
+|---|---|---|
+| Estructura correcta (intro, metodología, resultados, conclusión) | 3 | Pendiente |
+| Documentación clara del pipeline y decisiones de diseño | 4 | Pendiente |
+| Instrucciones de ejecución reproducibles | 3 | Pendiente |
+
+- [ ] Secciones: introducción, metodología, resultados, conclusión
+- [ ] Decisiones de diseño documentadas (elección de fuentes, modelo dimensional, materializations)
+- [ ] Pasos para reproducir el pipeline (`docker compose up`, Airbyte, dbt, Prefect)
+- [ ] Generado en Typst y exportado a PDF
+
+### 7. Video Explicativo — 8 pts
+
+| Criterio | Pts | Estado |
+|---|---|---|
+| Demostración del pipeline funcionando end-to-end | 4 | Pendiente |
+| Explicación clara de la arquitectura y decisiones técnicas | 4 | Pendiente |
+
+- [ ] Grabación mostrando el pipeline completo en ejecución
+- [ ] Narración explicando arquitectura y decisiones técnicas
+
+---
+
+## Puntaje total: 100 pts
+
+| Componente | Pts máx | Obtenido |
+|---|---|---|
+| 1. Extracción (Airbyte) | 15 | — |
+| 2. Modelado y Transformación (dbt) | 25 | — |
+| 3. Calidad de Datos (Testing) | 15 | — |
+| 4. Orquestación (Prefect) | 12 | — |
+| 5. Visualización (Metabase) | 15 | — |
+| 6. Reporte Técnico | 10 | — |
+| 7. Video Explicativo | 8 | — |
+| **TOTAL** | **100** | **—** |
+
+Escala: 5 = Excelente (90-100%) | 4 = Muy Bueno (75-89%) | 3 = Bueno (60-74%) | 2 = Regular (50-59%) | 1 = Insuficiente (<50%)
 
 ---
 
@@ -129,21 +217,3 @@ Los siguientes componentes se pueden copiar/adaptar de
 | dbt profiles | `dbt_maven_fuzzy/profiles.yml` | Cambiar nombre de proyecto y schema |
 | dbt project | `dbt_maven_fuzzy/dbt_project.yml` | Renombrar proyecto |
 | Pipeline Prefect | `prefect/ecommerce_pipeline.py` | Ajustar rutas y connection ID |
-
----
-
-## Estado general
-
-| Componente | Estado |
-|---|---|
-| Definición de fuentes de datos | Listo |
-| Definición del modelo dimensional | Pendiente |
-| Infraestructura Docker | Pendiente |
-| Airbyte connections | Pendiente |
-| dbt modelos staging | Pendiente |
-| dbt modelos marts | Pendiente |
-| dbt tests (dbt-expectations) | Pendiente |
-| Prefect pipeline | Pendiente |
-| Metabase dashboard | Pendiente |
-| Reporte técnico | Pendiente |
-| Video presentación | Pendiente |
