@@ -4,11 +4,9 @@
 -- conversión de tipos. dbt se encargará del tipado final.
 -- =============================================================
 
-CREATE DATABASE IF NOT EXISTS datatran
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE datatran;
+-- La base de datos es creada por 00_setup.sh usando MYSQL_DATABASE del .env.
+-- El entrypoint de MySQL ejecuta este script con --database=${MYSQL_DATABASE},
+-- por lo que no se necesita USE explícito.
 
 -- Tabla raw: refleja exactamente las 30 columnas del CSV 2026.
 -- Tipos TEXT preservan:

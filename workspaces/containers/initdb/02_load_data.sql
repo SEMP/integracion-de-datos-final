@@ -17,7 +17,8 @@
 --   · Fin de línea: LF (\n) tras la conversión
 -- =============================================================
 
-USE datatran;
+-- El entrypoint de MySQL ejecuta este script con --database=${MYSQL_DATABASE}.
+-- No se necesita USE explícito.
 
 LOAD DATA INFILE '/csv/datatran2026_utf8.csv'
 INTO TABLE accidentes_raw
