@@ -287,6 +287,22 @@ El paso siguiente configura los metadatos de la connection: nombre, tipo de sche
   caption: [Configuración de la connection: `MySQL_Datatran → MotherDuck_datatran`, schedule Manual, namespace Destination-defined],
 )
 
+=== Resultado del sync
+
+El primer sync completó exitosamente en 2 minutos 5 segundos, transfiriendo 7,39 MB con los 11.380 registros de `accidentes_raw`.
+
+#figure(
+  image("assets/airbyte_succesfull_sync_datatran.png", width: 100%),
+  caption: [Timeline de Airbyte: sync exitoso — 11.380 registros cargados en MotherDuck],
+)
+
+La verificación en MotherDuck confirma que los datos quedaron disponibles en `datatran.accidentes_raw` dentro de la base `airbyte_trabajo`:
+
+#figure(
+  image("assets/motherduck_datatran_data.png", width: 100%),
+  caption: [Vista previa de `datatran.accidentes_raw` en MotherDuck — 11.380 filas en 2,6 s],
+)
+
 == Paso 4: Modelos dbt
 
 El proyecto dbt en `workspaces/dbt_proyecto/` transforma los datos crudos en dos capas.
