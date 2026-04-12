@@ -32,6 +32,8 @@ Este trabajo implementa un pipeline ELT completo que integra datos de accidentes
 
 La arquitectura del pipeline sigue la secuencia: *MySQL → Airbyte → MotherDuck → dbt → Metabase*, orquestada con *Prefect*.
 
+*Repositorio:* #link("https://github.com/SEMP/integracion-de-datos-final")
+
 == Introducción
 
 === Problemática y motivación
@@ -228,13 +230,19 @@ docker exec -it mia-mysql mysql -u airbyte -pairbyte datatran \
 #table(
   columns: (auto, 1fr),
   table.header([*Campo*], [*Valor*]),
-  [Nombre],        [`MySQL_DATATRAN_2026`],
-  [Host],          [IP de la máquina con Docker],
-  [Port],          [`3306`],
-  [Base de datos], [`datatran`],
-  [Usuario],       [`airbyte`],
-  [Tabla],         [`accidentes_raw`],
-  [Sync mode],     [Full Refresh — dataset estático de 2026],
+  [Nombre],         [`MySQL_Datatran`],
+  [Host],           [`10.147.20.165` (IP ZeroTier — estable, no cambia)],
+  [Port],           [`3306`],
+  [Base de datos],  [`tf-datatran`],
+  [Usuario],        [`airbyte`],
+  [Encryption],     [required],
+  [SSH Tunnel],     [No Tunnel],
+  [Update Method],  [Scan Changes with User Defined Cursor],
+)
+
+#figure(
+  image("assets/airbyte_source_mysql.png", width: 72%),
+  caption: [Configuración del source MySQL en Airbyte],
 )
 
 === Source: Open-Meteo ERA5 (clima)
@@ -254,8 +262,13 @@ docker exec -it mia-mysql mysql -u airbyte -pairbyte datatran \
   columns: (auto, 1fr),
   table.header([*Campo*], [*Valor*]),
   [Nombre],         [`MotherDuck_datatran`],
-  [Database],       [`md:airbyte_curso`],
-  [Default schema], [`datatran_raw`],
+  [Destination DB], [`md:airbyte_trabajo`],
+  [Schema Name],    [`datatran`],
+)
+
+#figure(
+  image("assets/airbyte_destination_motherduck.png", width: 72%),
+  caption: [Configuración del destination MotherDuck en Airbyte],
 )
 
 == Paso 4: Modelos dbt
