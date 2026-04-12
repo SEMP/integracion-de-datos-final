@@ -8,7 +8,12 @@ Estrategia:
     redondeadas a 2 decimales (~1 km) y las consulta en lotes de
     BATCH_SIZE a la API ERA5 de Open-Meteo.
   · Escribe el resultado en data/clima_openmeteo.csv (separador ;).
-  · Soporta reanudación: si el CSV ya existe, omite las fechas procesadas.
+  · Reanudación segura: una fecha se registra como completada en
+    data/clima_openmeteo.progress SOLO después de que TODOS sus batches
+    terminaron exitosamente. Si el script se interrumpe a mitad de una
+    fecha, esa fecha se reprocesa completa en la siguiente ejecución
+    (los batches ya escritos quedan en el CSV; los datos duplicados se
+    eliminan al cargar en MySQL con DROP TABLE IF EXISTS).
 
 Dependencias:
   · mysql-connector-python  (pip install mysql-connector-python)
@@ -25,17 +30,18 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Rutas
 # ---------------------------------------------------------------------------
-SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR   = (SCRIPT_DIR / ".." / ".." / "data").resolve()
-ENV_FILE   = SCRIPT_DIR / ".env"
-OUTPUT_CSV = DATA_DIR / "clima_openmeteo.csv"
+SCRIPT_DIR    = Path(__file__).resolve().parent
+DATA_DIR      = (SCRIPT_DIR / ".." / ".." / "data").resolve()
+ENV_FILE      = SCRIPT_DIR / ".env"
+OUTPUT_CSV    = DATA_DIR / "clima_openmeteo.csv"
+PROGRESS_FILE = DATA_DIR / "clima_openmeteo.progress"  # fechas 100% completadas
 
 # ---------------------------------------------------------------------------
 # Configuración API
 # ---------------------------------------------------------------------------
-BATCH_SIZE  = 100
-DELAY_SEC   = 0.5
-TIMEZONE    = "America%2FSao_Paulo"
+BATCH_SIZE = 100
+DELAY_SEC  = 0.5
+TIMEZONE   = "America%2FSao_Paulo"
 
 HOURLY_VARS = [
     "precipitation",
@@ -67,6 +73,19 @@ def load_env(path: Path) -> dict:
         key, _, value = line.partition("=")
         env[key.strip()] = value.strip().strip('"').strip("'")
     return env
+
+
+def load_completed_dates() -> set:
+    """Lee el archivo .progress y devuelve el conjunto de fechas ya completadas."""
+    if not PROGRESS_FILE.exists():
+        return set()
+    return set(PROGRESS_FILE.read_text(encoding="utf-8").splitlines())
+
+
+def mark_date_complete(fecha: str) -> None:
+    """Agrega una fecha al archivo .progress (append, una línea por fecha)."""
+    with open(PROGRESS_FILE, "a", encoding="utf-8") as f:
+        f.write(fecha + "\n")
 
 
 def fetch_coords_by_date(env: dict) -> dict:
@@ -161,25 +180,25 @@ def main():
     total_pairs = sum(len(v) for v in by_date.values())
     print(f"  {total_dates} fechas | {total_pairs} pares únicos (fecha, coord)")
 
-    already_done: set = set()
-    if OUTPUT_CSV.exists():
-        with open(OUTPUT_CSV, encoding="utf-8", newline="") as f:
-            reader = csv.DictReader(f, delimiter=";")
-            for row in reader:
-                already_done.add(row["timestamp"][:10])
-        print(f"  Retomando — {len(already_done)} fechas ya en el CSV")
+    # Fechas 100% completadas según el archivo .progress
+    completed = load_completed_dates()
+    pending   = total_dates - len(completed)
+    if completed:
+        print(f"  Retomando — {len(completed)} fechas completadas, {pending} pendientes")
 
-    mode = "a" if already_done else "w"
-    with open(OUTPUT_CSV, mode, encoding="utf-8", newline="") as f:
+    # El CSV se abre en append si ya existe (puede tener filas de una ejecución
+    # anterior interrumpida; se reescriben al recargar en MySQL con DROP TABLE)
+    write_header = not OUTPUT_CSV.exists()
+    with open(OUTPUT_CSV, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
             f, fieldnames=FIELDNAMES, delimiter=";",
             quoting=csv.QUOTE_MINIMAL, lineterminator="\n",
         )
-        if mode == "w":
+        if write_header:
             writer.writeheader()
 
         for d_idx, (fecha, coords) in enumerate(by_date.items(), 1):
-            if fecha in already_done:
+            if fecha in completed:
                 continue
 
             batches = [
@@ -192,17 +211,29 @@ def main():
                 flush=True,
             )
 
+            batch_errors = 0
             for batch in batches:
                 lats = [c[0] for c in batch]
                 lons = [c[1] for c in batch]
                 try:
                     rows = call_openmeteo(lats, lons, fecha)
                     writer.writerows(rows)
+                    f.flush()  # asegurar escritura a disco antes de continuar
                 except Exception as exc:
                     print(f"    WARN: error en batch {fecha} — {exc}")
+                    batch_errors += 1
                 time.sleep(DELAY_SEC)
 
-    print(f"\nListo. CSV guardado en:\n  {OUTPUT_CSV}")
+            if batch_errors == 0:
+                # Solo marcar como completa si TODOS los batches tuvieron éxito
+                mark_date_complete(fecha)
+            else:
+                print(f"    WARN: {fecha} quedó incompleta ({batch_errors} batches fallidos)")
+
+    completed_now = load_completed_dates()
+    print(f"\nListo — {len(completed_now)}/{total_dates} fechas completadas")
+    print(f"  CSV:      {OUTPUT_CSV}")
+    print(f"  Progress: {PROGRESS_FILE}")
 
 
 if __name__ == "__main__":

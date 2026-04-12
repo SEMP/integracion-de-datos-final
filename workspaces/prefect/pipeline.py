@@ -194,14 +194,23 @@ def verify_accidentes_raw():
 
 @task(name="extract_openmeteo", timeout_seconds=1800)
 def extract_openmeteo():
+    """
+    Llama a extract_openmeteo.py, que maneja internamente la reanudación:
+    - Salta fechas ya completadas según data/clima_openmeteo.progress
+    - Una fecha solo se marca completa si TODOS sus batches tuvieron éxito
+    - Si el CSV existe pero una fecha está incompleta, se reprocesa
+    El script siempre se ejecuta; la idempotencia la maneja el script mismo.
+    """
     logger = get_run_logger()
-    output = DATA_DIR / "clima_openmeteo.csv"
+    progress = DATA_DIR / "clima_openmeteo.progress"
+    output   = DATA_DIR / "clima_openmeteo.csv"
 
-    if output.exists():
-        logger.info(f"CSV ya existe ({output}). Saltando extracción.")
-        return str(output)
+    if progress.exists():
+        completed = len(progress.read_text(encoding="utf-8").splitlines())
+        logger.info(f"Retomando extracción Open-Meteo ({completed} fechas ya completadas).")
+    else:
+        logger.info("Iniciando extracción Open-Meteo ERA5 desde cero...")
 
-    logger.info("Extrayendo datos climáticos ERA5 desde Open-Meteo...")
     result = subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / "extract_openmeteo.py")],
         capture_output=False,   # mostrar progreso en tiempo real
@@ -213,7 +222,7 @@ def extract_openmeteo():
     if not output.exists():
         raise RuntimeError(f"El CSV no fue generado en {output}.")
 
-    logger.info(f"CSV generado: {output}")
+    logger.info(f"Extracción completada: {output}")
     return str(output)
 
 
