@@ -1,0 +1,37 @@
+# dbt artifacts
+target/
+dbt_packages/
+logs/
+
+# DuckDB local files
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp
+
+# Secrets / env — solo se versiona example.env
+.env
+.env.*
+!example.env
+.envrc
+.direnv/
+set_env.sh
+secrets.*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage*
+build/
+dist/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

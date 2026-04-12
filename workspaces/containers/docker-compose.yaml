@@ -1,0 +1,65 @@
+services:
+  mia-mysql:
+    image: mysql:8.0
+    container_name: mia-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD
+      - MYSQL_DATABASE
+      - MYSQL_USER
+      - MYSQL_PASSWORD
+    ports:
+      - "${MYSQL_PORT}:3306"
+    expose:
+      - "3306"
+    volumes:
+      - mia-mysql_data:/var/lib/mysql:rw
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+      - ${CSV_DIR}:/csv
+      - /etc/localtime:/etc/localtime:ro
+    command: --default-authentication-plugin=mysql_native_password --local-infile=1 --secure-file-priv=/csv
+
+  mia-phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: mia-phpmyadmin
+    restart: unless-stopped
+    environment:
+      - PMA_HOST=mia-mysql
+      - PMA_USER=${MYSQL_USER}
+      - PMA_PASSWORD=${MYSQL_PASSWORD}
+    ports:
+      - "${PMA_PORT}:80"
+    expose:
+      - "80"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - mia-mysql
+
+  mia-metabase:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: metabase-duckdb:latest
+    container_name: mia-metabase
+    restart: unless-stopped
+    environment:
+      - MB_PLUGINS_DIR=${MB_PLUGINS_DIR:-/plugins}
+      - MB_DB_TYPE=mysql
+      - MB_DB_DBNAME=${MB_DB_DBNAME:-metabase}
+      - MB_DB_PORT=3306
+      - MB_DB_USER=${MYSQL_USER}
+      - MB_DB_PASS=${MYSQL_PASSWORD}
+      - MB_DB_HOST=mia-mysql
+    ports:
+      - "${MB_PORT}:3000"
+    expose:
+      - "3000"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - mia-mysql
+
+volumes:
+  mia-mysql_data:
+    name: mia-mysql_data
