@@ -26,7 +26,9 @@
 
 == Arquitectura general
 
-#image("assets/Arquitectura_presentacion.png", height: 100%)
+#align(center + horizon)[
+  #image("assets/Arquitectura_presentacion.png", height: 85%)
+]
 
 // ---------------------------------------------------------------------------
 = Fuentes de datos
@@ -237,6 +239,23 @@ python pipeline.py
   [4], [Dona],            [¿Qué condición climática concentra más accidentes?],
   [5], [Barras agrupadas],[¿Qué condición climática genera más muertes y heridos?],
 )
+
+== Vista del dashboard — sin filtros vs. filtrado por Estado RJ
+
+#align(center + horizon)[
+  #grid(
+    columns: (1fr, 1fr),
+    gutter: 1em,
+    [
+      #align(center)[*Sin filtros — 11.380 accidentes*]
+      #image("assets/metabase_visualization_unfiltered.png", height: 75%)
+    ],
+    [
+      #align(center)[*Estado RJ — 525 accidentes*]
+      #image("assets/metabase_visualization_filtered.png", height: 75%)
+    ],
+  )
+]
 
 == Hallazgos principales
 
