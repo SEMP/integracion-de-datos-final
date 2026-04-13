@@ -109,86 +109,73 @@ def ensure_containers_up():
 
 
 # ---------------------------------------------------------------------------
-# Task 2 — Verificar datos en accidentes_raw
+# Task 2 — Convertir CSVs y cargar accidentes_raw
 # ---------------------------------------------------------------------------
 
-@task(name="verify_accidentes_raw", retries=1)
-def verify_accidentes_raw():
+@task(name="load_accidentes_raw", retries=1)
+def load_accidentes_raw():
+    """
+    1. Corre convert_csv_to_utf8.py para convertir cualquier CSV nuevo en CSV_SOURCE_DIR.
+    2. Recrea accidentes_raw (DROP + CREATE via 01_schema.sql).
+    3. Carga todos los *_utf8.csv de data/ mediante LOAD DATA LOCAL INFILE.
+    """
     logger = get_run_logger()
     import mysql.connector
 
+    # 1 — Convertir CSVs nuevos
+    logger.info("Convirtiendo CSVs a UTF-8...")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "convert_csv_to_utf8.py")],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"convert_csv_to_utf8.py falló:\n{result.stderr}")
+    logger.info(result.stdout.strip())
+
+    # 2 — Recrear tabla (DROP TABLE IF EXISTS + CREATE)
+    logger.info("Recreando tabla accidentes_raw...")
+    schema_sql = INITDB_DIR / "01_schema.sql"
+    with open(schema_sql, "rb") as f:
+        result = subprocess.run(
+            ["docker", "exec", "-i", MYSQL_CONTAINER,
+             "mysql", f"-u{MYSQL_USER}", f"-p{MYSQL_PASSWORD}", MYSQL_DATABASE],
+            input=f.read(), capture_output=True,
+        )
+    if result.returncode != 0:
+        raise RuntimeError(f"01_schema.sql falló:\n{result.stderr.decode()}")
+
+    # 3 — Cargar todos los *_utf8.csv de data/
+    csv_files = sorted(DATA_DIR.glob("*_utf8.csv"))
+    if not csv_files:
+        raise RuntimeError(f"No se encontraron archivos *_utf8.csv en {DATA_DIR}.")
+
     con = mysql.connector.connect(
         host=MYSQL_HOST, port=MYSQL_PORT,
         user=MYSQL_USER, password=MYSQL_PASSWORD,
         database=MYSQL_DATABASE,
+        allow_local_infile=True,
     )
     cursor = con.cursor()
+    total = 0
+    for csv_path in csv_files:
+        logger.info(f"  Cargando {csv_path.name}...")
+        cursor.execute("""
+            LOAD DATA LOCAL INFILE %s
+            INTO TABLE accidentes_raw
+            CHARACTER SET utf8mb4
+            FIELDS TERMINATED BY ';' ENCLOSED BY '"'
+            LINES TERMINATED BY '\\n'
+            IGNORE 1 LINES
+        """, (str(csv_path),))
+        total += cursor.rowcount
+        logger.info(f"    → {cursor.rowcount:,} filas")
 
-    # Verificar que la tabla existe
-    cursor.execute("""
-        SELECT COUNT(*) FROM information_schema.tables
-        WHERE table_schema = %s AND table_name = 'accidentes_raw'
-    """, (MYSQL_DATABASE,))
-    table_exists = cursor.fetchone()[0] > 0
-
-    count = 0
-    if table_exists:
-        cursor.execute("SELECT COUNT(*) FROM accidentes_raw")
-        count = cursor.fetchone()[0]
-
+    con.commit()
     cursor.close()
     con.close()
 
-    if count > 0:
-        logger.info(f"accidentes_raw verificado: {count:,} registros.")
-        return count
-
-    # Si la tabla está vacía o no existe, intentar correr los initdb scripts
-    logger.warning(
-        "accidentes_raw está vacío o no existe. "
-        "Intentando ejecutar scripts initdb..."
-    )
-
-    csv_path = DATA_DIR / "datatran2026_utf8.csv"
-    if not csv_path.exists():
-        raise RuntimeError(
-            f"No se encontró {csv_path}.\n"
-            "Ejecutá primero: python3 workspaces/scripts/convert_csv_to_utf8.py"
-        )
-
-    for script in sorted(INITDB_DIR.glob("0[0-9]*.sql")):
-        logger.info(f"  Ejecutando {script.name}...")
-        with open(script, "rb") as f:
-            result = subprocess.run(
-                ["docker", "exec", "-i", MYSQL_CONTAINER,
-                 "mysql", f"-u{MYSQL_USER}", f"-p{MYSQL_PASSWORD}", MYSQL_DATABASE],
-                input=f.read(), capture_output=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"{script.name} falló:\n{result.stderr.decode()}"
-                )
-
-    # Verificar de nuevo
-    con = mysql.connector.connect(
-        host=MYSQL_HOST, port=MYSQL_PORT,
-        user=MYSQL_USER, password=MYSQL_PASSWORD,
-        database=MYSQL_DATABASE,
-    )
-    cursor = con.cursor()
-    cursor.execute("SELECT COUNT(*) FROM accidentes_raw")
-    count = cursor.fetchone()[0]
-    cursor.close()
-    con.close()
-
-    if count == 0:
-        raise RuntimeError(
-            "accidentes_raw sigue vacío después de correr los scripts. "
-            "Verificá que CSV_DIR en containers/.env apunte a data/."
-        )
-
-    logger.info(f"accidentes_raw cargado: {count:,} registros.")
-    return count
+    logger.info(f"accidentes_raw cargado: {total:,} filas en total.")
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +376,7 @@ def dbt_test():
 @flow(name="datatran_pipeline", log_prints=True)
 def datatran_pipeline():
     ensure_containers_up()
-    verify_accidentes_raw()
+    load_accidentes_raw()
     extract_openmeteo()
     load_clima_raw()
     airbyte_sync()

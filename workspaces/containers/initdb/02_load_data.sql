@@ -20,12 +20,6 @@
 -- El entrypoint de MySQL ejecuta este script con --database=${MYSQL_DATABASE}.
 -- No se necesita USE explícito.
 
-LOAD DATA INFILE '/csv/datatran2026_utf8.csv'
-INTO TABLE accidentes_raw
-CHARACTER SET utf8mb4
-FIELDS
-    TERMINATED BY ';'
-    ENCLOSED BY '"'
-LINES
-    TERMINATED BY '\n'
-IGNORE 1 LINES;
+-- La carga del CSV es manejada por el pipeline Prefect (task load_accidentes_raw).
+-- Este script se conserva como referencia histórica.
+-- El pipeline ejecuta: convert_csv_to_utf8.py → 01_schema.sql → LOAD DATA LOCAL INFILE
