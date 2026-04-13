@@ -115,8 +115,8 @@ Capas implementadas:
 | dbt modelos intermediate | ✅ Listo | `int_accidentes_clima`: LEFT JOIN por lat_r/lon_r/fecha/hora |
 | dbt modelos marts | ✅ Listo | `obt_accidentes`: tabla ancha final materializada como table |
 | dbt tests (dbt-expectations) | ✅ Listo | 15/15 tests pasan, 0 warnings |
-| Reporte técnico (Typst) | ✅ Listo | Pipeline completo documentado con capturas, DAG y visualizaciones |
-| Presentación (Typst/diatypst) | ✅ Listo | 16 slides, 6 secciones, lista para video |
+| Reporte técnico (Typst) | ✅ Entregado | `main.typ` entregado |
+| Presentación (Typst/diatypst) | ✅ Entregado | `presentacion.typ` entregada |
 | Metabase dashboard | ✅ Listo | 5 visualizaciones implementadas sobre `obt_accidentes` |
 | Video presentación | ⏳ Pendiente | — |
 
@@ -241,18 +241,19 @@ Capas implementadas:
 - [x] Captura Prefect UI (`prefect_graphs.png`) — historial de 9 ejecuciones, última exitosa
 - [x] Capturas Metabase — dashboard sin filtros y filtrado por RJ
 - [x] Presentación (`presentacion.typ`) — 16 slides para video
-- [ ] Exportar reporte a PDF (`typst compile main.typ`)
-- [ ] Exportar presentación a PDF (`typst compile presentacion.typ`)
+- [x] Reporte entregado (`main.typ`)
+- [x] Presentación entregada (`presentacion.typ`)
 
 ### 7. Video Explicativo — 8 pts
 
 | Criterio | Pts | Estado |
 |---|---|---|
-| Demostración del pipeline funcionando end-to-end | 4 | ⏳ Pendiente |
-| Explicación clara de la arquitectura y decisiones técnicas | 4 | ⏳ Pendiente |
+| Demostración del pipeline funcionando end-to-end | 4 | ✅ Entregado |
+| Explicación clara de la arquitectura y decisiones técnicas | 4 | ✅ Entregado |
 
-- [ ] Grabación del pipeline completo en ejecución
-- [ ] Narración explicando arquitectura y decisiones técnicas
+- [x] Grabación del pipeline completo en ejecución
+- [x] Narración explicando arquitectura y decisiones técnicas
+- [x] Video publicado: https://youtu.be/a9imQfuy2-g
 
 ---
 
@@ -265,22 +266,18 @@ Capas implementadas:
 | 3. Calidad de Datos (Testing) | 15 | ~15 (15/15 tests pasan, 5+ dbt-expectations ✅) |
 | 4. Orquestación (Prefect) | 12 | ~12 (7 tasks, ejecución end-to-end exitosa ✅) |
 | 5. Visualización (Metabase) | 15 | ~15 (5 visualizaciones implementadas ✅) |
-| 6. Reporte Técnico | 10 | ~9 (completo, pendiente exportar PDF) |
-| 7. Video Explicativo | 8 | — |
-| **TOTAL** | **100** | **~92** |
+| 6. Reporte Técnico | 10 | ~10 ✅ Entregado |
+| 7. Video Explicativo | 8 | ~8 ✅ Entregado |
+| **TOTAL** | **100** | **~100** |
 
 ---
 
-## Pasos siguientes (orden sugerido)
+## Entregables finales
 
-### 1. Exportar PDFs
-
-```bash
-typst compile docs/typst/main.typ
-typst compile docs/typst/presentacion.typ
-```
-
-### 2. Video
-
-Grabar demostración end-to-end usando `presentacion.typ` como guía: ejecución del pipeline Prefect, Airbyte sync, dbt tests, y navegación del dashboard.
+| Entregable | Enlace |
+|---|---|
+| Video explicativo | https://youtu.be/a9imQfuy2-g |
+| Repositorio | https://github.com/SEMP/integracion-de-datos-final |
+| Reporte técnico | `docs/typst/main.typ` |
+| Presentación | `docs/typst/presentacion.typ` |
 
