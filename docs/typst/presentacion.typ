@@ -26,17 +26,7 @@
 
 == Arquitectura general
 
-#align(center)[
-  #table(
-    columns: (auto, auto, auto, auto, auto),
-    align: center,
-    table.header([*Extracción*], [*Carga*], [*Warehouse*], [*Transformación*], [*Visualización*]),
-    [MySQL\ (Docker)], [Airbyte], [MotherDuck], [dbt], [Metabase],
-    [Open-Meteo\ ERA5], [↑\ Prefect], [], [15/15 tests], [Dashboard\ + filtros],
-  )
-]
-
-*Orquestación:* Prefect ejecuta las 7 etapas de extremo a extremo con un único comando.
+#image("assets/Arquitectura_presentacion.png", height: 100%)
 
 // ---------------------------------------------------------------------------
 = Fuentes de datos

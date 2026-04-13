@@ -71,6 +71,60 @@ con datos climáticos históricos (Open-Meteo ERA5) para análisis multidimensio
 └──────────────────────┘   └─────────────────────────────────────┘
 ```
 
+```mermaid
+flowchart TD
+    subgraph SRC["Fuentes de datos"]
+        CSV["📄 datatran2026.csv\nLatin-1 · sep ';' · ~11.380 filas\nPolicía Rodoviária Federal"]
+        API["🌐 Open-Meteo ERA5\narchive-api.open-meteo.com\nGratuita · sin API key"]
+    end
+
+    subgraph PREP["Pre-procesamiento (scripts/)"]
+        CONV["convert_csv_to_utf8.py\nLatin-1 → UTF-8\nCRLF → LF"]
+        EXTR["extract_openmeteo.py\nBatches por fecha/coordenada\nReanudación via .progress/.failed"]
+    end
+
+    subgraph MYSQL["MySQL 8.0  (Docker: tf-mysql :3306)"]
+        RAW["accidentes_raw\n30 cols · todo TEXT"]
+        CLR["clima_raw\n13 cols · todo TEXT"]
+    end
+
+    subgraph AIR["Airbyte — MySQL_Datatran → MotherDuck_datatran"]
+        SYNC["Full Refresh | Overwrite\nSchedule: Manual\nDisparo: Prefect"]
+    end
+
+    subgraph MD["MotherDuck  (airbyte_trabajo)"]
+        MDA["datatran.accidentes_raw"]
+        MDC["datatran.clima_raw"]
+    end
+
+    subgraph DBT["dbt  (dbt-duckdb)"]
+        STA["stg_accidentes\nview · tipado · surrogate key\nNULLIF · decimales · lat_r/lon_r"]
+        STC["stg_clima\nview · dedup · WMO decoder\nlat_r · lon_r · fecha · hora"]
+        INT["int_accidentes_clima\nview · LEFT JOIN ERA5\npor lat_r, lon_r, fecha, hora"]
+        OBT["obt_accidentes\ntable · 57 cols · ~11.380 filas\n✅ 15/15 dbt tests"]
+    end
+
+    subgraph VIZ["Metabase  (tf-metabase :3000)"]
+        DASH["Dashboard · 5 paneles\nFiltros: Estado · Fechas\nFuente: marts.obt_accidentes"]
+    end
+
+    PREF["⚙️ Prefect\ndatatran_pipeline\n7 tasks · end-to-end"]
+
+    CSV --> CONV --> RAW
+    API --> EXTR --> CLR
+    RAW --> SYNC
+    CLR --> SYNC
+    SYNC --> MDA & MDC
+    MDA --> STA
+    MDC --> STC
+    STA & STC --> INT --> OBT --> DASH
+
+    PREF -. "orquesta" .-> CONV
+    PREF -. "orquesta" .-> EXTR
+    PREF -. "dispara sync" .-> SYNC
+    PREF -. "dbt run + test" .-> OBT
+```
+
 ## Fuentes de datos
 
 ### Fuente 1: DATATRAN PRF 2026

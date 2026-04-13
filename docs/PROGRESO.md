@@ -115,7 +115,8 @@ Capas implementadas:
 | dbt modelos intermediate | ✅ Listo | `int_accidentes_clima`: LEFT JOIN por lat_r/lon_r/fecha/hora |
 | dbt modelos marts | ✅ Listo | `obt_accidentes`: tabla ancha final materializada como table |
 | dbt tests (dbt-expectations) | ✅ Listo | 15/15 tests pasan, 0 warnings |
-| Reporte técnico (Typst) | 🔄 En progreso | Pasos 1–5 documentados, pendiente resultados finales |
+| Reporte técnico (Typst) | ✅ Listo | Pipeline completo documentado con capturas, DAG y visualizaciones |
+| Presentación (Typst/diatypst) | ✅ Listo | 16 slides, 6 secciones, lista para video |
 | Metabase dashboard | ✅ Listo | 5 visualizaciones implementadas sobre `obt_accidentes` |
 | Video presentación | ⏳ Pendiente | — |
 
@@ -236,9 +237,12 @@ Capas implementadas:
 - [x] Secciones introducción y metodología redactadas (`docs/typst/main.typ`)
 - [x] Decisiones de diseño documentadas (fuentes, encoding, TEXT en MySQL, Open-Meteo vs OpenWeather)
 - [x] Instrucciones reproducibles en `README.md` y `main.typ`
+- [x] Captura DAG dbt (`dag_dbt_obt_table.png`) — lineage graph completo
 - [x] Captura Prefect UI (`prefect_graphs.png`) — historial de 9 ejecuciones, última exitosa
-- [x] Capturas Metabase — dashboard sin filtros y filtrado por RJ incluidas
-- [ ] Exportar a PDF
+- [x] Capturas Metabase — dashboard sin filtros y filtrado por RJ
+- [x] Presentación (`presentacion.typ`) — 16 slides para video
+- [ ] Exportar reporte a PDF (`typst compile main.typ`)
+- [ ] Exportar presentación a PDF (`typst compile presentacion.typ`)
 
 ### 7. Video Explicativo — 8 pts
 
@@ -269,12 +273,14 @@ Capas implementadas:
 
 ## Pasos siguientes (orden sugerido)
 
-### 1. Reporte técnico — completar resultados
+### 1. Exportar PDFs
 
-- Agregar capturas de: Prefect UI (flow run exitoso), `dbt test` (15/15)
-- Exportar a PDF: `typst compile docs/typst/main.typ`
+```bash
+typst compile docs/typst/main.typ
+typst compile docs/typst/presentacion.typ
+```
 
 ### 2. Video
 
-Grabar demostración end-to-end: ejecución del pipeline Prefect, Airbyte sync, dbt tests, y navegación del dashboard.
+Grabar demostración end-to-end usando `presentacion.typ` como guía: ejecución del pipeline Prefect, Airbyte sync, dbt tests, y navegación del dashboard.
 

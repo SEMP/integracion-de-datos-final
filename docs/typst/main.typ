@@ -33,6 +33,11 @@ Este trabajo implementa un pipeline ELT completo que integra datos de accidentes
 
 La arquitectura del pipeline sigue la secuencia: *MySQL → Airbyte → MotherDuck → dbt → Metabase*, orquestada con *Prefect*.
 
+#figure(
+  image("assets/arquitectura.svg", width: 100%),
+  caption: [Arquitectura del pipeline ELT],
+)
+
 *Repositorio:* #link("https://github.com/SEMP/integracion-de-datos-final")
 
 == Introducción
