@@ -229,14 +229,15 @@ Capas implementadas:
 
 | Criterio | Pts | Estado |
 |---|---|---|
-| Estructura correcta (intro, metodología, resultados, conclusión) | 3 | 🔄 En progreso |
-| Documentación clara del pipeline y decisiones de diseño | 4 | 🔄 En progreso |
+| Estructura correcta (intro, metodología, resultados, conclusión) | 3 | ✅ Listo |
+| Documentación clara del pipeline y decisiones de diseño | 4 | ✅ Listo |
 | Instrucciones de ejecución reproducibles | 3 | ✅ Listo |
 
 - [x] Secciones introducción y metodología redactadas (`docs/typst/main.typ`)
 - [x] Decisiones de diseño documentadas (fuentes, encoding, TEXT en MySQL, Open-Meteo vs OpenWeather)
 - [x] Instrucciones reproducibles en `README.md` y `main.typ`
-- [ ] Completar sección de resultados (capturas Airbyte, dbt, Prefect, Metabase)
+- [x] Captura Prefect UI (`prefect_graphs.png`) — historial de 9 ejecuciones, última exitosa
+- [x] Capturas Metabase — dashboard sin filtros y filtrado por RJ incluidas
 - [ ] Exportar a PDF
 
 ### 7. Video Explicativo — 8 pts
@@ -260,9 +261,9 @@ Capas implementadas:
 | 3. Calidad de Datos (Testing) | 15 | ~15 (15/15 tests pasan, 5+ dbt-expectations ✅) |
 | 4. Orquestación (Prefect) | 12 | ~12 (7 tasks, ejecución end-to-end exitosa ✅) |
 | 5. Visualización (Metabase) | 15 | ~15 (5 visualizaciones implementadas ✅) |
-| 6. Reporte Técnico | 10 | ~6 (pasos 1–5 documentados, faltan resultados finales) |
+| 6. Reporte Técnico | 10 | ~9 (completo, pendiente exportar PDF) |
 | 7. Video Explicativo | 8 | — |
-| **TOTAL** | **100** | **~90** |
+| **TOTAL** | **100** | **~92** |
 
 ---
 

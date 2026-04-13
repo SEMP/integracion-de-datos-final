@@ -315,7 +315,14 @@ La verificación en MotherDuck confirma que los datos quedaron disponibles en `d
 
 == Paso 4: Modelos dbt
 
-El proyecto dbt en `workspaces/dbt_proyect/` transforma los datos crudos en tres capas.
+El proyecto dbt en `workspaces/dbt_proyect/` transforma los datos crudos en tres capas: *staging* (tipado y limpieza), *intermediate* (join entre fuentes) y *marts* (tabla analítica final).
+
+#figure(
+  image("assets/dag_dbt_obt_table.png", width: 100%),
+  caption: [Lineage graph de dbt — de las fuentes raw hasta `obt_accidentes`],
+)
+
+El grafo muestra el flujo completo de dependencias: `datatran.accidentes_raw` y `datatran.clima_raw` (fuentes en MotherDuck, verde) alimentan respectivamente a `stg_accidentes` y `stg_clima` (vistas de staging, celeste). Ambos modelos convergen en `int_accidentes_clima` (vista intermedia) que resuelve el join por coordenadas y tiempo, y cuyo resultado se materializa como tabla en `obt_accidentes` (marts, púrpura).
 
 === Configuración
 

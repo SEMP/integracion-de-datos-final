@@ -10,31 +10,65 @@ con datos climáticos históricos (Open-Meteo ERA5) para análisis multidimensio
 ## Arquitectura
 
 ```
-CSV DATATRAN 2026           Open-Meteo ERA5 API
-(Latin-1, separador ;)      (gratuita, sin key)
-         │                           │
-         ▼                           │
- convert_csv_to_utf8.py              │
-         │                           │
-         ▼                           ▼
-    MySQL 8.0              ┌─────────────────┐
-  (Docker, todo TEXT)      │    Airbyte      │
-         │                 │  (2 sources →   │
-         └────────────────►│   MotherDuck)   │
-                           └────────┬────────┘
-                                    │
-                                    ▼
-                               MotherDuck
-                             (Data Warehouse)
-                                    │
-                                    ▼
-                              dbt (staging
-                              + marts + tests)
-                                    │
-                          ┌─────────┴─────────┐
-                          ▼                   ▼
-                       Metabase           Prefect
-                      (dashboard)      (orquestación)
+┌─────────────────────────────────────────────────────────────────────┐
+│                          FUENTES DE DATOS                           │
+│                                                                     │
+│  datatran2026.csv                  Open-Meteo ERA5 API              │
+│  (Latin-1, sep. ;, ~11.380 filas)  (archive-api.open-meteo.com)    │
+│  Policía Rodoviária Federal        Reanalysis horario por coordenada│
+└──────────┬──────────────────────────────────┬───────────────────────┘
+           │                                  │
+           ▼                                  ▼
+  convert_csv_to_utf8.py            extract_openmeteo.py
+  (Latin-1 → UTF-8, CRLF → LF)     (batches por fecha/coordenada,
+  salida: data/*_utf8.csv            reanudación via .progress/.failed)
+           │                                  │
+           ▼                                  ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     MySQL 8.0  (Docker: tf-mysql)                │
+│                                                                  │
+│   datatran.accidentes_raw        datatran.clima_raw              │
+│   (30 cols, todo TEXT)           (13 cols, todo TEXT)            │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │  Airbyte  (Full Refresh | Overwrite)
+                            │  MySQL_Datatran → MotherDuck_datatran
+                            ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                  MotherDuck  (airbyte_trabajo)                   │
+│                                                                  │
+│   datatran.accidentes_raw        datatran.clima_raw              │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │  dbt  (dbt-duckdb)
+                            ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     Capas de transformación                      │
+│                                                                  │
+│  staging (views)                                                 │
+│    stg_accidentes  — tipado, NULLIF, decimales, surrogate key    │
+│    stg_clima       — tipado, dedup, decodificación WMO           │
+│                                                                  │
+│  intermediate (view)                                             │
+│    int_accidentes_clima  — LEFT JOIN por (lat_r, lon_r, fecha,   │
+│                            hora); flag clima_join_match          │
+│                                                                  │
+│  marts (table)                                                   │
+│    obt_accidentes  — One Big Table: 57 cols, ~11.380 filas       │
+│                      15/15 dbt tests pasan                       │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │
+               ┌────────────┴────────────┐
+               ▼                         ▼
+┌──────────────────────┐   ┌─────────────────────────────────────┐
+│  Metabase            │   │  Prefect  (datatran_pipeline)        │
+│  (tf-metabase :3000) │   │                                     │
+│                      │   │  1. ensure_containers_up            │
+│  Dashboard con 5     │   │  2. load_accidentes_raw             │
+│  paneles sobre       │   │  3. extract_openmeteo               │
+│  obt_accidentes      │   │  4. load_clima_raw                  │
+│                      │   │  5. airbyte_sync                    │
+│  Filtros: Estado,    │   │  6. dbt_run                         │
+│  Fechas              │   │  7. dbt_test                        │
+└──────────────────────┘   └─────────────────────────────────────┘
 ```
 
 ## Fuentes de datos
@@ -80,7 +114,7 @@ Trabajo_Final/
 │   │   └── initdb/
 │   │       ├── 00_setup.sh                  # Crea BDs y otorga permisos (se ejecuta primero)
 │   │       ├── 01_schema.sql                # Schema MySQL (todo TEXT)
-│   │       └── 02_load_data.sql             # LOAD DATA INFILE
+│   │       └── 02_load_data.sql             # Referencia histórica (carga gestionada por Prefect)
 │   ├── dbt_proyect/
 │   │   ├── dbt_project.yml
 │   │   ├── profiles.yml
