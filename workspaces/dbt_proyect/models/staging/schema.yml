@@ -26,7 +26,6 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 100
-              mostly: 1.0
       - name: latitude
         description: "Latitud GPS"
         data_tests:
@@ -39,6 +38,7 @@ models:
         data_tests:
           - dbt_expectations.expect_column_proportion_of_unique_values_to_be_between:
               min_value: 0.005
+              max_value: 1.0
 
   - name: stg_clima
     description: "Datos climáticos ERA5 con tipos corregidos, claves de join y descripción WMO"

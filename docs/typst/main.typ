@@ -11,7 +11,7 @@
 }
 
 #show: it => basic-report(
-  doc-category: "Integración de datos",
+  doc-category: "Introducción a la Integración de Datos",
   doc-title: "Trabajo Práctico Final",
   author: "Sergio Enrique Morel Peralta\nClara Patricia Almirón Burgos\nDaniel Ramírez Brizuela",
   affiliation: "Facultad Politécnica - UNA",
@@ -19,6 +19,7 @@
   language: "es",
   compact-mode: true,
   heading-font: "Lato",
+  datetime-fmt: "(2026-04-12)",
   it
 )
 #v(-8em)

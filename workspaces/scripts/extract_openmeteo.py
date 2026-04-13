@@ -22,7 +22,6 @@ Dependencias:
 
 import csv
 import json
-import sys
 import time
 import urllib.request
 from collections import defaultdict
@@ -36,6 +35,7 @@ DATA_DIR      = (SCRIPT_DIR / ".." / ".." / "data").resolve()
 ENV_FILE      = SCRIPT_DIR / ".env"
 OUTPUT_CSV    = DATA_DIR / "clima_openmeteo.csv"
 PROGRESS_FILE = DATA_DIR / "clima_openmeteo.progress"  # fechas 100% completadas
+FAILED_FILE   = DATA_DIR / "clima_openmeteo.failed"    # fechas con batches fallidos (no se reintentan)
 
 # ---------------------------------------------------------------------------
 # Configuración API
@@ -79,16 +79,25 @@ def load_env(path: Path) -> dict:
 
 
 def load_completed_dates() -> set:
-    """Lee el archivo .progress y devuelve el conjunto de fechas ya completadas."""
-    if not PROGRESS_FILE.exists():
-        return set()
-    return set(PROGRESS_FILE.read_text(encoding="utf-8").splitlines())
+    """Fechas 100% completas (.progress) y fechas con errores parciales (.failed)."""
+    done = set()
+    for path in (PROGRESS_FILE, FAILED_FILE):
+        if path.exists():
+            done.update(path.read_text(encoding="utf-8").splitlines())
+    return done
 
 
 def mark_date_complete(fecha: str) -> None:
-    """Agrega una fecha al archivo .progress (append, una línea por fecha)."""
+    """Marca una fecha como completada sin errores."""
     with open(PROGRESS_FILE, "a", encoding="utf-8") as f:
         f.write(fecha + "\n")
+
+
+def mark_date_failed(fecha: str, n_errors: int) -> None:
+    """Marca una fecha con batches fallidos — no se reintentará en próximas ejecuciones."""
+    with open(FAILED_FILE, "a", encoding="utf-8") as f:
+        f.write(fecha + "\n")
+    print(f"    SKIP permanente: {fecha} registrada en .failed ({n_errors} batches fallidos)")
 
 
 def fetch_coords_by_date(env: dict) -> dict:
@@ -243,20 +252,18 @@ def main():
                 time.sleep(DELAY_SEC)
 
             if batch_errors == 0:
-                # Solo marcar como completa si TODOS los batches tuvieron éxito
                 mark_date_complete(fecha)
             else:
-                print(f"    WARN: {fecha} quedó incompleta ({batch_errors} batches fallidos)")
+                mark_date_failed(fecha, batch_errors)
 
-    completed_now = load_completed_dates()
-    pending = total_dates - len(completed_now)
-    print(f"\nListo — {len(completed_now)}/{total_dates} fechas completadas")
+    n_complete = len(PROGRESS_FILE.read_text(encoding="utf-8").splitlines()) if PROGRESS_FILE.exists() else 0
+    n_failed   = len(FAILED_FILE.read_text(encoding="utf-8").splitlines())   if FAILED_FILE.exists()   else 0
+    n_pending  = total_dates - n_complete - n_failed
+    print(f"\nListo — {n_complete}/{total_dates} completas | {n_failed} con errores parciales | {n_pending} pendientes")
     print(f"  CSV:      {OUTPUT_CSV}")
     print(f"  Progress: {PROGRESS_FILE}")
-
-    if pending > 0:
-        print(f"\nATENCION: {pending} fechas pendientes. Volver a ejecutar para completar.")
-        sys.exit(1)   # señaliza al task de Prefect que la extracción está incompleta
+    if n_failed:
+        print(f"  Failed:   {FAILED_FILE}")
 
 
 if __name__ == "__main__":

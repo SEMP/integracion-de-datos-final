@@ -1,6 +1,6 @@
 # Pipeline ELT — Accidentes de Tráfico en Brasil
 
-Trabajo Práctico Final — Introducción a la Ingeniería de Datos (MIA 03, Febrero 2026)
+Trabajo Práctico Final — Introducción a la Integración de Datos (MIA 03)
 
 ## Descripción
 

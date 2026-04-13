@@ -19,6 +19,7 @@ Ejecutar:
   python pipeline.py
 """
 
+import base64
 import os
 import subprocess
 import sys
@@ -38,7 +39,7 @@ WORKSPACE_DIR   = PIPELINE_DIR.parent
 PROJECT_DIR     = WORKSPACE_DIR.parent
 CONTAINERS_DIR  = WORKSPACE_DIR / "containers"
 SCRIPTS_DIR     = WORKSPACE_DIR / "scripts"
-DBT_DIR         = WORKSPACE_DIR / "dbt_proyecto"
+DBT_DIR         = WORKSPACE_DIR / "dbt_proyect"
 DATA_DIR        = PROJECT_DIR / "data"
 INITDB_DIR      = CONTAINERS_DIR / "initdb"
 
@@ -65,9 +66,11 @@ MYSQL_PORT      = int(ENV.get("MYSQL_PORT",  "3306"))
 MYSQL_USER      = ENV.get("MYSQL_USER",      "airbyte")
 MYSQL_PASSWORD  = ENV.get("MYSQL_PASSWORD",  "")
 MYSQL_DATABASE  = ENV.get("MYSQL_DATABASE",  "datatran")
-AIRBYTE_URL     = ENV.get("AIRBYTE_URL",     "http://localhost:8000")
-AIRBYTE_CONN_ID = ENV.get("AIRBYTE_CONNECTION_ID", "")
-MYSQL_CONTAINER = ENV.get("MYSQL_CONTAINER", "tf-mysql")
+AIRBYTE_URL      = ENV.get("AIRBYTE_URL",      "http://localhost:8000")
+AIRBYTE_CONN_ID  = ENV.get("AIRBYTE_CONNECTION_ID", "")
+AIRBYTE_USER     = ENV.get("AIRBYTE_USER",     "airbyte")
+AIRBYTE_PASSWORD = ENV.get("AIRBYTE_PASSWORD", "password")
+MYSQL_CONTAINER  = ENV.get("MYSQL_CONTAINER",  "tf-mysql")
 
 # ---------------------------------------------------------------------------
 # Task 1 — Contenedores Docker
@@ -294,6 +297,15 @@ def load_clima_raw():
 # Task 5 — Airbyte sync
 # ---------------------------------------------------------------------------
 
+def _airbyte_headers() -> dict:
+    """Headers JSON + Basic Auth para la API de Airbyte."""
+    token = base64.b64encode(f"{AIRBYTE_USER}:{AIRBYTE_PASSWORD}".encode()).decode()
+    return {
+        "Content-Type":  "application/json",
+        "Authorization": f"Basic {token}",
+    }
+
+
 @task(name="airbyte_sync", timeout_seconds=600)
 def airbyte_sync():
     logger = get_run_logger()
@@ -305,9 +317,7 @@ def airbyte_sync():
     url     = f"{AIRBYTE_URL}/api/v1/connections/sync"
     payload = json.dumps({"connectionId": AIRBYTE_CONN_ID}).encode()
     req     = urllib.request.Request(
-        url, data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+        url, data=payload, headers=_airbyte_headers(), method="POST",
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         job = json.loads(resp.read())
@@ -322,7 +332,7 @@ def airbyte_sync():
         req = urllib.request.Request(
             status_url,
             data=json.dumps({"id": job_id}).encode(),
-            headers={"Content-Type": "application/json"},
+            headers=_airbyte_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -344,7 +354,10 @@ def airbyte_sync():
 @task(name="dbt_run", retries=1)
 def dbt_run():
     logger = get_run_logger()
-    for cmd in [["dbt", "deps"], ["dbt", "run"]]:
+    for cmd in [
+        ["dbt", "deps",  "--profiles-dir", "."],
+        ["dbt", "run",   "--profiles-dir", "."],
+    ]:
         logger.info(f"Ejecutando: {' '.join(cmd)}")
         result = subprocess.run(cmd, cwd=DBT_DIR, capture_output=True, text=True)
         logger.info(result.stdout[-2000:])
@@ -361,7 +374,7 @@ def dbt_test():
     logger = get_run_logger()
     logger.info("Ejecutando: dbt test")
     result = subprocess.run(
-        ["dbt", "test"], cwd=DBT_DIR, capture_output=True, text=True,
+        ["dbt", "test", "--profiles-dir", "."], cwd=DBT_DIR, capture_output=True, text=True,
     )
     logger.info(result.stdout[-2000:])
     if result.returncode != 0:
