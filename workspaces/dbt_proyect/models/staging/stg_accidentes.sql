@@ -4,8 +4,13 @@ with source as (
 
 renamed as (
     select
+        -- Surrogate key propio (DATATRAN id no es confiable como único)
+        row_number() over (order by id, data_inversa, horario) as id_accidente,
+
+        -- ID original de DATATRAN (informativo, sin restricción de unicidad)
+        id                                                                          as id_datatran,
+
         -- Identificación
-        cast(id as bigint)                                                          as id,
         cast(data_inversa as date)                                                  as data_inversa,
         dia_semana,
         cast(horario as time)                                                       as horario,

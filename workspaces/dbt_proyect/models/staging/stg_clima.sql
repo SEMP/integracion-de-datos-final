@@ -2,6 +2,16 @@ with source as (
     select * from {{ source('datatran', 'clima_raw') }}
 ),
 
+-- Elimina duplicados producidos por múltiples cargas del CSV
+deduped as (
+    select *,
+        row_number() over (
+            partition by latitude, longitude, "timestamp"
+            order by latitude
+        ) as _rn
+    from source
+),
+
 typed as (
     select
         -- Claves de join con accidentes
@@ -54,7 +64,8 @@ typed as (
         try_cast(nullif(shortwave_radiation,  '') as double)        as shortwave_radiation,
         try_cast(nullif(is_day,               '') as int) = 1       as is_day
 
-    from source
+    from deduped
+    where _rn = 1
 )
 
 select * from typed

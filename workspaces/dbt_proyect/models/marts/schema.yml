@@ -6,11 +6,13 @@ models:
       One Big Table final. Una fila por accidente con todos los atributos DATATRAN
       más las variables ERA5 del momento y lugar del siniestro. Consumida por Metabase.
     columns:
-      - name: id
-        description: "ID único del accidente — clave primaria"
+      - name: id_accidente
+        description: "Surrogate key generado por dbt"
         data_tests:
           - unique
           - not_null
+      - name: id_datatran
+        description: "ID original de DATATRAN — sin restricción de unicidad"
       - name: data_inversa
         description: "Fecha del accidente"
         data_tests:

@@ -1,18 +1,9 @@
-{{
-    config(
-        materialized = 'table',
-        indexes = [
-            {'columns': ['id'],            'unique': true},
-            {'columns': ['data_inversa']},
-            {'columns': ['uf']},
-            {'columns': ['causa_acidente']},
-        ]
-    )
-}}
+{{ config(materialized = 'table') }}
 
 select
     -- Identificación
-    id,
+    id_accidente,
+    id_datatran,
     data_inversa,
     dia_semana,
     horario,

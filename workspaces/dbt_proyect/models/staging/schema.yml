@@ -4,11 +4,13 @@ models:
   - name: stg_accidentes
     description: "Accidentes PRF 2026 con tipos corregidos y columnas de join lat_r/lon_r"
     columns:
-      - name: id
-        description: "ID único del accidente"
+      - name: id_accidente
+        description: "Surrogate key generado por dbt (row_number)"
         data_tests:
           - unique
           - not_null
+      - name: id_datatran
+        description: "ID original de DATATRAN — informativo, sin garantía de unicidad"
       - name: uf
         description: "Estado federativo"
         data_tests:

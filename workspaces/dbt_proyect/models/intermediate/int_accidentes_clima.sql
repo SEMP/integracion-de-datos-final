@@ -9,7 +9,8 @@ clima as (
 joined as (
     select
         -- Campos de accidentes
-        a.id,
+        a.id_accidente,
+        a.id_datatran,
         a.data_inversa,
         a.dia_semana,
         a.horario,
