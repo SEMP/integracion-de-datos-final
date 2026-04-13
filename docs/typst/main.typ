@@ -454,7 +454,7 @@ Se implementa un *One Big Table* (OBT) en lugar de esquema estrella. La justific
 - La integración de ERA5 ya introduce complejidad suficiente en la capa intermedia.
 
 #table(
-  columns: (auto, auto, 1fr),
+  columns: (auto, 1fr, auto),
   table.header([*Grupo*], [*Columnas*], [*Origen*]),
   [Identificación],  [`id`, `data_inversa`, `horario`, `dia_semana`, `fase_dia`],          [DATATRAN],
   [Localización],    [`uf`, `municipio`, `br`, `km`, `latitude`, `longitude`],              [DATATRAN],
@@ -462,13 +462,13 @@ Se implementa un *One Big Table* (OBT) en lugar de esquema estrella. La justific
   [Vía],             [`sentido_via`, `tipo_pista`, `tracado_via`, `uso_solo`],              [DATATRAN],
   [Víctimas],        [`mortos`, `feridos_leves`, `feridos_graves`, `ilesos`, `veiculos`],   [DATATRAN],
   [Clima PRF],       [`condicao_metereologica`],                                             [DATATRAN],
-  [Clima ERA5],      [`precipitation`, `weather_code`, `weather_desc`, `temperature_2m`,\
-                      `relative_humidity_2m`, `dew_point_2m`, `cloud_cover_low`,\
+  [Clima ERA5],      [`precipitation`, `weather_code`, `weather_desc`, `temperature_2m`,
+                      `relative_humidity_2m`, `dew_point_2m`, `cloud_cover_low`,
                       `wind_speed_10m`, `wind_gusts_10m`, `shortwave_radiation`, `is_day`], [Open-Meteo],
 )
 
 #figure(
-  image("assets/dbt_obt_table.svg", width: 80%),
+  image("assets/dbt_obt_table.svg", height: 25cm),
   caption: [Estructura de `obt_accidentes` — One Big Table (marts)],
 )
 
