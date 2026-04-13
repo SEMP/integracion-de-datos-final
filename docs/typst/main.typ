@@ -583,6 +583,15 @@ python pipeline.py
 
 La variable `AIRBYTE_CONNECTION_ID` se obtiene en Airbyte UI → Connections → Settings → Connection ID.
 
+=== Resultado de la ejecución
+
+#figure(
+  image("assets/prefect_graphs.png", width: 100%),
+  caption: [Dashboard de Prefect — historial de ejecuciones del flow `datatran_pipeline`],
+)
+
+El dashboard de Prefect registra 9 ejecuciones del flow `datatran_pipeline` durante el desarrollo del pipeline. Las 8 ejecuciones fallidas (rojo) corresponden a las iteraciones de corrección —errores de autenticación en Airbyte, ajuste de rutas dbt, resolución de duplicados en `stg_clima`— mientras que la última ejecución (verde) completó exitosamente las 7 tasks con 28 task runs completados sobre 36 totales. Los 8 task runs fallidos pertenecen a ejecuciones anteriores acumuladas en el historial.
+
 == Paso 6: Visualización con Metabase
 
 Metabase se levanta como contenedor Docker desde la misma imagen personalizada usada en las tareas anteriores, que combina Metabase v0.58.8 con el driver DuckDB de MotherDuck:
@@ -612,19 +621,48 @@ En el setup inicial de Metabase se selecciona el driver *DuckDB* y se configura:
   caption: [Configuración de la conexión DuckDB/MotherDuck en Metabase],
 )
 
-=== Visualizaciones planeadas
+=== Dashboard implementado
+
+Las visualizaciones se organizaron en un único dashboard de Metabase con cinco paneles, todos alimentados por la tabla `marts.obt_accidentes` en MotherDuck mediante preguntas SQL con variables de filtro.
+
+==== Filtros interactivos
+
+El dashboard expone dos filtros que se propagan simultáneamente a todos los paneles:
+
+- *Estado* — selector de UF (campo `uf`); permite aislar cualquier estado federativo.
+- *Fechas* — rango de fechas sobre `data_inversa` (tipo DATE); soporta períodos relativos como "Previous 12 months" o rangos manuales.
+
+==== Paneles del dashboard
+
+El dashboard contiene cinco visualizaciones dispuestas en grilla:
 
 #table(
   columns: (auto, auto, 1fr),
-  table.header([*\#*], [*Tipo*], [*Pregunta de negocio*]),
-  [1], [Mapa de calor],  [¿En qué estados y rutas se concentran los accidentes mortales?],
-  [2], [Línea temporal], [¿Cómo evoluciona la cantidad de accidentes por mes?],
-  [3], [Barra apilada],  [¿Qué causas predominan bajo precipitación vs cielo despejado?],
-  [4], [Scatter plot],   [¿Existe correlación entre precipitación (mm/h) y mortalidad?],
-  [5], [Tabla pivot],    [Mortalidad promedio por condición PRF vs código WMO ERA5],
+  table.header([*Panel*], [*Tipo*], [*Pregunta de negocio*]),
+  [1], [Dona],               [¿Cuáles son las 5 principales causas de accidentes y su participación?],
+  [2], [Barras],             [¿Cómo se distribuyen los accidentes por día de la semana?],
+  [3], [Líneas doble eje],   [¿Cómo evolucionan accidentes y muertes a lo largo de la semana?],
+  [4], [Dona],               [¿Qué condición climática concentra más accidentes?],
+  [5], [Barras agrupadas],   [¿Qué condición climática genera más muertes y heridos?],
 )
 
-Filtros configurados: período de fecha, UF, causa del accidente, condición climática ERA5.
+==== Vista sin filtros — dataset completo (11.380 accidentes)
+
+#figure(
+  image("assets/metabase_visualization_unfiltered.png", width: 100%),
+  caption: [Dashboard completo — 11.380 accidentes, todos los estados y período completo],
+)
+
+Con el dataset completo se observa que *Céu Claro* concentra el 55.42% de los accidentes y domina visiblemente el panel de condiciones climáticas. Las causas principales —*Ausência de reação* (30.2%) y *Reação tardia* (28.8%)— acumulan casi el 60% de los casos, confirmando que la atención del conductor es el factor determinante por encima del clima o la infraestructura. En cuanto a la distribución semanal, los accidentes crecen hacia el fin de semana y la curva de muertes sigue esa tendencia con mayor pendiente, indicando mayor severidad relativa en sábados y domingos.
+
+==== Vista filtrada — Estado RJ, período reciente (525 accidentes)
+
+#figure(
+  image("assets/metabase_visualization_filtered.png", width: 100%),
+  caption: [Dashboard filtrado — Estado RJ, Previous 12 months — 525 accidentes],
+)
+
+Al filtrar por el estado de Río de Janeiro se reduce el conjunto a 525 accidentes. La distribución de causas se mantiene estable respecto al total nacional (*Ausência de reação* sigue siendo la primera causa con ~34%), lo que sugiere que el patrón de comportamiento del conductor es consistente entre estados. En el panel de condiciones climáticas, *Céu Claro* continúa dominando (48.76%), seguido de *Nublado* (20.85%) y *Chuva* (19.56%) —una proporción de lluvia notablemente mayor que en el promedio nacional, consistente con el clima de RJ. El panel de condiciones por gravedad muestra que *Céu Claro* y *Chuva* lideran en heridos leves y graves, mientras que *Vento* y *Nevoeiro/Neblina* presentan mayores muertes relativas pese a su bajo volumen.
 
 == Conclusiones
 

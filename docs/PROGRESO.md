@@ -116,7 +116,7 @@ Capas implementadas:
 | dbt modelos marts | ✅ Listo | `obt_accidentes`: tabla ancha final materializada como table |
 | dbt tests (dbt-expectations) | ✅ Listo | 15/15 tests pasan, 0 warnings |
 | Reporte técnico (Typst) | 🔄 En progreso | Pasos 1–5 documentados, pendiente resultados finales |
-| Metabase dashboard | ⏳ Pendiente | Conexión lista, faltan visualizaciones |
+| Metabase dashboard | ✅ Listo | 5 visualizaciones implementadas sobre `obt_accidentes` |
 | Video presentación | ⏳ Pendiente | — |
 
 ---
@@ -211,18 +211,19 @@ Capas implementadas:
 | Criterio | Pts | Estado |
 |---|---|---|
 | Conexión al Data Warehouse funcionando | 2 | ✅ Listo |
-| Mínimo 5 visualizaciones implementadas | 5 | ⏳ Pendiente |
-| Visualizaciones responden preguntas de negocio claras | 4 | ⏳ Pendiente |
-| Dashboard organizado con filtros interactivos | 4 | ⏳ Pendiente |
+| Mínimo 5 visualizaciones implementadas | 5 | ✅ Listo |
+| Visualizaciones responden preguntas de negocio claras | 4 | ✅ Listo |
+| Dashboard organizado con filtros interactivos | 4 | ✅ Listo |
 
 - [x] Conexión a `md:airbyte_trabajo` configurada (`Motherduck_Trabajo_Final`)
-- [ ] Visualización 1: mapa de calor — accidentes mortales por estado/ruta
-- [ ] Visualización 2: línea temporal — evolución mensual de accidentes
-- [ ] Visualización 3: barra apilada — causas bajo lluvia vs cielo despejado
-- [ ] Visualización 4: scatter — precipitación ERA5 vs mortalidad
-- [ ] Visualización 5: tabla pivot — condición PRF vs código WMO ERA5
-- [ ] Filtros: período de fecha, UF, causa del accidente
-- [ ] Captura del dashboard
+- [x] Dashboard unificado con 5 paneles sobre `marts.obt_accidentes`
+- [x] Panel 1 (dona): top 5 causas de accidentes con participación porcentual
+- [x] Panel 2 (barras): distribución de accidentes por día de la semana
+- [x] Panel 3 (líneas doble eje): accidentes y muertes por día de la semana
+- [x] Panel 4 (dona): accidentes por condición climática PRF
+- [x] Panel 5 (barras agrupadas): muertes, heridos leves y graves por condición climática
+- [x] Filtros interactivos: Estado (UF) y Fechas, propagados a todos los paneles
+- [x] Capturas sin filtros (11.380 accidentes) y filtrada por RJ incluidas en `docs/typst/assets/`
 
 ### 6. Reporte Técnico — 10 pts
 
@@ -258,29 +259,21 @@ Capas implementadas:
 | 2. Modelado y Transformación (dbt) | 25 | ~25 (staging + intermediate + OBT + fuente/ref/materializations ✅) |
 | 3. Calidad de Datos (Testing) | 15 | ~15 (15/15 tests pasan, 5+ dbt-expectations ✅) |
 | 4. Orquestación (Prefect) | 12 | ~12 (7 tasks, ejecución end-to-end exitosa ✅) |
-| 5. Visualización (Metabase) | 15 | 2 (conexión ✅, faltan visualizaciones) |
+| 5. Visualización (Metabase) | 15 | ~15 (5 visualizaciones implementadas ✅) |
 | 6. Reporte Técnico | 10 | ~6 (pasos 1–5 documentados, faltan resultados finales) |
 | 7. Video Explicativo | 8 | — |
-| **TOTAL** | **100** | **~75** |
+| **TOTAL** | **100** | **~90** |
 
 ---
 
 ## Pasos siguientes (orden sugerido)
 
-### 1. Metabase — dashboard
+### 1. Reporte técnico — completar resultados
 
-Con `obt_accidentes` disponible en MotherDuck (`datatran.marts.obt_accidentes`):
-- Crear las 5 visualizaciones definidas en el checklist
-- Configurar filtros de fecha, UF, causa del accidente y condición climática ERA5
-- Tomar captura del dashboard completo
-
-### 2. Reporte técnico — completar resultados
-
-- Agregar capturas de: Prefect UI (flow run exitoso), `dbt test` (15/15), dashboard Metabase
-- Completar sección de resultados en `main.typ`
+- Agregar capturas de: Prefect UI (flow run exitoso), `dbt test` (15/15)
 - Exportar a PDF: `typst compile docs/typst/main.typ`
 
-### 3. Video
+### 2. Video
 
 Grabar demostración end-to-end: ejecución del pipeline Prefect, Airbyte sync, dbt tests, y navegación del dashboard.
 
