@@ -178,11 +178,11 @@ LEFT JOIN stg_clima c
   columns: (2fr, 1fr, 1fr),
   table.header([*Test*], [*Modelo*], [*Dimensión*]),
   [`unique` + `not_null`],                              [`id_accidente`],      [Unicidad / completitud],
-  [`expect_column_values_to_be_between`],               [`mortos` 0–100],      [Validez de rango],
-  [`expect_column_values_to_be_between`],               [`latitude` -34 a 6],  [Validez geográfica],
+  [`expect_column_values_to_be_between` (0–100)],       [`mortos`],            [Sanidad: ningún accidente individual supera 100 fallecidos],
+  [`expect_column_values_to_be_between` (-34 a 6)],     [`latitude`],          [Cobertura geográfica de Brasil (sur ~-33.75° a norte ~5.3°)],
   [`not_null`],                                         [`uf`],                [Completitud],
-  [`expect_column_values_to_be_between`],               [`data_inversa`],      [Validez temporal],
-  [`expect_column_proportion_of_unique_values`],        [`municipio`],         [Consistencia],
+  [`expect_column_values_to_be_between`],               [`data_inversa`],      [Validez temporal 2026],
+  [`expect_column_proportion_of_unique_values`],        [`municipio`],         [Consistencia: >100 municipios distintos],
 )
 
 *Resultado: 15/15 tests pasan, 0 warnings.*
