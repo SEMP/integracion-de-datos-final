@@ -42,7 +42,7 @@ PROGRESS_FILE = DATA_DIR / "clima_openmeteo.progress"  # fechas 100% completadas
 # ---------------------------------------------------------------------------
 BATCH_SIZE       = 100
 DELAY_SEC        = 2      # pausa base entre requests
-DELAY_429_SEC    = 60     # espera fija ante 429 (no crece — máx 60s por reintento)
+DELAY_429_SEC    = 20     # espera fija ante 429 (no crece — máx 20s por reintento)
 MAX_RETRIES_429  = 4      # después de 4 reintentos, abandona el batch y continúa
 TIMEZONE         = "America%2FSao_Paulo"
 
