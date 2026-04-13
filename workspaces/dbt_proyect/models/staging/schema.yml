@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: stg_accidentes
+    description: "Accidentes PRF 2026 con tipos corregidos y columnas de join lat_r/lon_r"
+    columns:
+      - name: id
+        description: "ID único del accidente"
+        data_tests:
+          - unique
+          - not_null
+      - name: uf
+        description: "Estado federativo"
+        data_tests:
+          - not_null
+      - name: data_inversa
+        description: "Fecha del accidente"
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2026-01-01'::date"
+              max_value: "'2026-12-31'::date"
+      - name: mortos
+        description: "Cantidad de fallecidos"
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              mostly: 1.0
+      - name: latitude
+        description: "Latitud GPS"
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -34.0
+              max_value: 6.0
+              row_condition: "latitude is not null"
+      - name: municipio
+        description: "Municipio del accidente"
+        data_tests:
+          - dbt_expectations.expect_column_proportion_of_unique_values_to_be_between:
+              min_value: 0.005
+
+  - name: stg_clima
+    description: "Datos climáticos ERA5 con tipos corregidos, claves de join y descripción WMO"
+    columns:
+      - name: lat_r
+        description: "Latitud redondeada a 2 decimales"
+        data_tests:
+          - not_null
+      - name: lon_r
+        description: "Longitud redondeada a 2 decimales"
+        data_tests:
+          - not_null
+      - name: timestamp_utc
+        description: "Timestamp horario ERA5"
+        data_tests:
+          - not_null

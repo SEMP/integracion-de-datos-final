@@ -1,0 +1,9 @@
+dbt_proyect:
+  outputs:
+    dev:
+      type: duckdb
+      path: "md:airbyte_trabajo"
+      schema: datatran
+      settings:
+        motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
+  target: dev

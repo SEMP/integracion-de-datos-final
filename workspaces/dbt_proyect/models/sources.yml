@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: datatran
+    database: airbyte_trabajo
+    schema: datatran
+    description: "Tablas raw sincronizadas desde MySQL vía Airbyte"
+    tables:
+      - name: accidentes_raw
+        description: "Accidentes de tráfico PRF 2026 — todo TEXT, tal como llega de MySQL"
+      - name: clima_raw
+        description: "Datos climáticos ERA5 extraídos de Open-Meteo — todo TEXT"

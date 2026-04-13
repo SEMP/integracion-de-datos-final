@@ -13,7 +13,7 @@
 #show: it => basic-report(
   doc-category: "Integración de datos",
   doc-title: "Trabajo Práctico Final",
-  author: "Sergio Enrique Morel Peralta\nClara Patricia Almirón Burgos\nDaniel Ramírez",
+  author: "Sergio Enrique Morel Peralta\nClara Patricia Almirón Burgos\nDaniel Ramírez Brizuela",
   affiliation: "Facultad Politécnica - UNA",
   logo: image("assets/fpuna_logo_institucional.svg", width: 2cm),
   language: "es",

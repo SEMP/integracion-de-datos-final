@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: obt_accidentes
+    description: >
+      One Big Table final. Una fila por accidente con todos los atributos DATATRAN
+      más las variables ERA5 del momento y lugar del siniestro. Consumida por Metabase.
+    columns:
+      - name: id
+        description: "ID único del accidente — clave primaria"
+        data_tests:
+          - unique
+          - not_null
+      - name: data_inversa
+        description: "Fecha del accidente"
+        data_tests:
+          - not_null
+      - name: uf
+        description: "Estado federativo"
+        data_tests:
+          - not_null
+      - name: clima_join_match
+        description: "True si se encontró dato ERA5 para este accidente"
