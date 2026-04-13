@@ -81,8 +81,19 @@ Trabajo_Final/
 │   │       ├── 00_setup.sh                  # Crea BDs y otorga permisos (se ejecuta primero)
 │   │       ├── 01_schema.sql                # Schema MySQL (todo TEXT)
 │   │       └── 02_load_data.sql             # LOAD DATA INFILE
-│   ├── dbt_proyecto/                        # (pendiente)
-│   └── prefect/                             # (pendiente)
+│   ├── dbt_proyect/
+│   │   ├── dbt_project.yml
+│   │   ├── profiles.yml
+│   │   ├── packages.yml
+│   │   ├── macros/generate_schema_name.sql
+│   │   └── models/
+│   │       ├── sources.yml
+│   │       ├── staging/         # stg_accidentes, stg_clima + schema.yml
+│   │       ├── intermediate/    # int_accidentes_clima
+│   │       └── marts/           # obt_accidentes + schema.yml
+│   └── prefect/
+│       ├── pipeline.py
+│       └── example.env
 ```
 
 ---
@@ -165,7 +176,8 @@ Servicios que se inician:
 Al primer arranque, MySQL ejecuta automáticamente (en orden alfabético):
 1. `00_setup.sh` — crea las bases `${MYSQL_DATABASE}` y `metabase`, otorga permisos a `airbyte`
 2. `01_schema.sql` — crea la tabla `accidentes_raw` (todo TEXT)
-3. `02_load_data.sql` — carga `datatran2026_utf8.csv` con `LOAD DATA INFILE`
+
+> La carga de datos en `accidentes_raw` la gestiona el pipeline Prefect (`load_accidentes_raw`), no el initdb.
 
 ### Paso 4 — Verificar la carga
 
@@ -199,39 +211,25 @@ docker exec -it tf-mysql mysql -u airbyte -pairbyte datatran \
    - Namespace: `Destination-defined`
    - Stream `accidentes_raw`: sync mode **Full Refresh | Overwrite**
 
-### Paso 6 — Extraer datos climáticos Open-Meteo ERA5
+### Paso 6 — Agregar clima_raw como segundo stream en Airbyte
 
-```bash
-# Agregar credenciales MySQL al .env del script
-cp workspaces/scripts/example.env workspaces/scripts/.env
-# Editar workspaces/scripts/.env con MYSQL_PASSWORD
+La extracción ERA5 y la carga de `clima_raw` en MySQL las gestiona automáticamente el pipeline
+Prefect (tasks `extract_openmeteo` y `load_clima_raw`). Una vez que el pipeline haya corrido
+al menos una vez:
 
-python3 workspaces/scripts/extract_openmeteo.py
-# ~200 requests, ~5-10 min. Soporta reanudación si se interrumpe.
-# Salida: data/clima_openmeteo.csv
-```
+1. En Airbyte UI → Connection `MySQL_Datatran → MotherDuck_datatran` → Streams
+2. Activar el stream `clima_raw` (13 campos) con sync mode **Full Refresh | Overwrite**
+3. Guardar y ejecutar un sync manual
 
-Luego cargar en MySQL:
-
-```bash
-docker exec -i tf-mysql mysql -uairbyte -p<PASSWORD> datatran \
-  < workspaces/containers/initdb/03_clima_schema.sql
-
-docker exec tf-mysql mysql -uairbyte -p<PASSWORD> datatran -e \
-  "LOAD DATA INFILE '/csv/clima_openmeteo.csv' INTO TABLE clima_raw \
-   CHARACTER SET utf8mb4 FIELDS TERMINATED BY ';' ENCLOSED BY '\"' \
-   LINES TERMINATED BY '\n' IGNORE 1 LINES;"
-```
-
-Agregar `clima_raw` como segundo stream en la connection Airbyte y ejecutar un nuevo sync.
+A partir de ahí el pipeline Prefect dispara el sync automáticamente en cada ejecución.
 
 ### Paso 7 — dbt: transformaciones y tests
 
 ```bash
-cd workspaces/dbt_proyecto
-dbt deps
-dbt run
-dbt test
+cd workspaces/dbt_proyect
+dbt deps --profiles-dir .
+dbt run  --profiles-dir .
+dbt test --profiles-dir .
 ```
 
 ### Paso 8 — Prefect: orquestación del pipeline completo
@@ -252,10 +250,10 @@ python pipeline.py
 
 Tareas del pipeline en orden:
 1. `ensure_containers_up` — `docker compose up -d` + espera MySQL
-2. `verify_accidentes_raw` — verifica datos; corre initdb automáticamente si está vacío
-3. `extract_openmeteo` — extrae ERA5 y genera `data/clima_openmeteo.csv`
-4. `load_clima_raw` — crea tabla y carga el CSV en MySQL
-5. `airbyte_sync` — dispara sync y polling hasta completar
+2. `load_accidentes_raw` — convierte CSVs a UTF-8, recrea `accidentes_raw` y carga todos los `*_utf8.csv`
+3. `extract_openmeteo` — extrae ERA5 y genera `data/clima_openmeteo.csv` (con reanudación)
+4. `load_clima_raw` — crea tabla `clima_raw` y carga el CSV en MySQL
+5. `airbyte_sync` — dispara sync (Basic Auth) y hace polling hasta completar
 6. `dbt_run` — `dbt deps` + `dbt run`
 7. `dbt_test` — `dbt test`
 

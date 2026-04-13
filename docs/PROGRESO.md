@@ -53,6 +53,7 @@ Trabajo_Final/
 └── workspaces/
     ├── scripts/
     │   ├── convert_csv_to_utf8.py
+    │   ├── extract_openmeteo.py # Extracción ERA5 con reanudación
     │   └── example.env
     ├── containers/
     │   ├── Dockerfile
@@ -61,25 +62,40 @@ Trabajo_Final/
     │   └── initdb/
     │       ├── 00_setup.sh      # Crea BDs y permisos (se ejecuta primero)
     │       ├── 01_schema.sql    # CREATE TABLE accidentes_raw (todo TEXT)
-    │       └── 02_load_data.sql # LOAD DATA INFILE
-    ├── dbt_proyecto/            # pendiente
-    └── prefect/                 # pendiente
+    │       ├── 02_load_data.sql # Referencia histórica (carga gestionada por Prefect)
+    │       └── 03_clima_schema.sql # CREATE TABLE clima_raw
+    ├── dbt_proyect/
+    │   ├── dbt_project.yml
+    │   ├── profiles.yml
+    │   ├── packages.yml
+    │   ├── macros/generate_schema_name.sql
+    │   └── models/
+    │       ├── sources.yml
+    │       ├── staging/
+    │       │   ├── stg_accidentes.sql
+    │       │   ├── stg_clima.sql
+    │       │   └── schema.yml
+    │       ├── intermediate/
+    │       │   └── int_accidentes_clima.sql
+    │       └── marts/
+    │           ├── obt_accidentes.sql
+    │           └── schema.yml
+    └── prefect/
+        ├── pipeline.py
+        └── example.env
 ```
 
 ---
 
 ## Modelo dimensional
 
-**Pendiente de definir:** Kimball (estrella) — candidato principal sobre OBT por alta cardinalidad
-de dimensiones (`dim_ubicacion` ~500 municipios, `dim_causa` ~40 causas).
+Se eligió el patrón **One Big Table (OBT)** en lugar de esquema estrella Kimball. Con ~11.380 filas el volumen no justifica la normalización, y el análisis exploratorio en Metabase se beneficia de una sola tabla ancha. La capa intermedia ya resuelve el join con ERA5.
 
-Candidatos para dimensiones:
-- `dim_fecha` — fecha, día semana, fase del día, mes, año
-- `dim_ubicacion` — UF, municipio, BR (carretera), km, coordenadas
-- `dim_causa` — causa, tipo de accidente, clasificación
-- `dim_via` — tipo de pista, trazado, sentido, uso del suelo
-- `dim_clima` — condición meteorológica PRF + variables Open-Meteo ERA5
-- `fct_accidentes` — tabla de hechos con víctimas, vehículos, FK a dimensiones
+Capas implementadas:
+- `staging/stg_accidentes` — tipado, NULLIF, ROUND lat/lon, surrogate key `id_accidente`
+- `staging/stg_clima` — tipado, decodificación WMO, join keys `lat_r/lon_r/fecha/hora`
+- `intermediate/int_accidentes_clima` — LEFT JOIN por `(lat_r, lon_r, data_inversa, hora)`
+- `marts/obt_accidentes` — tabla ancha final consumida por Metabase
 
 ---
 
@@ -90,16 +106,16 @@ Candidatos para dimensiones:
 | Definición de fuentes de datos | ✅ Listo | DATATRAN 2026 + Open-Meteo ERA5 |
 | Pre-procesamiento CSV | ✅ Listo | `convert_csv_to_utf8.py` con `.env`, salida a `data/` |
 | Infraestructura Docker | ✅ Listo | `tf-mysql`, `tf-phpmyadmin`, `tf-metabase` operativos |
-| Carga MySQL | ✅ Listo | 11.380 registros en `datatran.accidentes_raw` verificados |
 | Metabase — conexión MotherDuck | ✅ Listo | `md:airbyte_trabajo`, driver DuckDB configurado |
-| Airbyte — source MySQL + destination MotherDuck | ✅ Listo | `MySQL_Datatran → MotherDuck_datatran`, 11.380 registros sincronizados |
-| Airbyte — source Open-Meteo (clima_raw) | 🔄 En progreso | Script `extract_openmeteo.py` listo, pendiente ejecución y sync |
-| Prefect pipeline | 🔄 En progreso | `workspaces/prefect/pipeline.py` creado, pendiente ejecución |
+| Airbyte — source MySQL + destination MotherDuck | ✅ Listo | `MySQL_Datatran → MotherDuck_datatran` sincronizando |
+| Airbyte — clima_raw sync | ✅ Listo | `clima_raw` agregado como segundo stream, sync exitoso |
+| Prefect pipeline | ✅ Listo | 7 tasks, ejecución end-to-end exitosa |
+| Definición del modelo dimensional | ✅ Listo | OBT: staging → intermediate (join ERA5) → marts/obt_accidentes |
+| dbt modelos staging | ✅ Listo | `stg_accidentes`, `stg_clima` con tipado y surrogate key |
+| dbt modelos intermediate | ✅ Listo | `int_accidentes_clima`: LEFT JOIN por lat_r/lon_r/fecha/hora |
+| dbt modelos marts | ✅ Listo | `obt_accidentes`: tabla ancha final materializada como table |
+| dbt tests (dbt-expectations) | ✅ Listo | 15/15 tests pasan, 0 warnings |
 | Reporte técnico (Typst) | 🔄 En progreso | Pasos 1–5 documentados, pendiente resultados finales |
-| Definición del modelo dimensional | ✅ Listo | OBT elegido: staging → intermediate (join) → marts/obt_accidentes |
-| dbt modelos staging | ⏳ Pendiente | — |
-| dbt modelos marts | ⏳ Pendiente | — |
-| dbt tests (dbt-expectations) | ⏳ Pendiente | — |
 | Metabase dashboard | ⏳ Pendiente | Conexión lista, faltan visualizaciones |
 | Video presentación | ⏳ Pendiente | — |
 
@@ -130,64 +146,65 @@ Candidatos para dimensiones:
 - [x] Destination MotherDuck (`MotherDuck_datatran`, `md:airbyte_trabajo`, schema `datatran`) configurado
 - [x] Connection `MySQL_Datatran → MotherDuck_datatran` creada y sync exitoso (11.380 registros, 2m 5s)
 - [x] Sync mode: Full Refresh | Overwrite justificado (dataset estático, sin columnas de timestamp)
-- [ ] Script `extract_openmeteo.py` ejecutado → `data/clima_openmeteo.csv` generado
-- [ ] Tabla `clima_raw` cargada en MySQL y segundo stream agregado a la connection Airbyte
-- [ ] Sync final con ambas tablas (`accidentes_raw` + `clima_raw`) completado
+- [x] Script `extract_openmeteo.py` ejecutado → `data/clima_openmeteo.csv` generado (53/59 fechas completas; 6 con errores de API marcadas en `.failed`)
+- [x] Tabla `clima_raw` cargada en MySQL vía pipeline Prefect (`load_clima_raw`)
+- [x] Segundo stream `clima_raw` (13 campos) agregado a la connection Airbyte
+- [x] Sync final con ambas tablas (`accidentes_raw` + `clima_raw`) completado exitosamente
 
 ### 2. Modelado y Transformación con dbt — 25 pts
 
 | Criterio | Pts | Estado |
 |---|---|---|
-| Proyecto dbt estructurado correctamente (staging/, marts/) | 3 | ⏳ Pendiente |
-| Sources definidos en YAML con database y schema | 2 | ⏳ Pendiente |
-| Modelos staging con limpieza y tipado de datos | 5 | ⏳ Pendiente |
-| Modelo dimensional (Kimball) o OBT implementado | 6 | ⏳ Pendiente |
-| Justificación del enfoque de modelado elegido | 4 | ⏳ Pendiente |
-| Uso correcto de `ref()` y `source()` para dependencias | 2 | ⏳ Pendiente |
-| Materializations apropiados (view/table/incremental) | 3 | ⏳ Pendiente |
+| Proyecto dbt estructurado correctamente (staging/, marts/) | 3 | ✅ Listo |
+| Sources definidos en YAML con database y schema | 2 | ✅ Listo |
+| Modelos staging con limpieza y tipado de datos | 5 | ✅ Listo |
+| Modelo dimensional (Kimball) o OBT implementado | 6 | ✅ Listo |
+| Justificación del enfoque de modelado elegido | 4 | ✅ Listo |
+| Uso correcto de `ref()` y `source()` para dependencias | 2 | ✅ Listo |
+| Materializations apropiados (view/table/incremental) | 3 | ✅ Listo |
 
-- [ ] Proyecto dbt inicializado, `profiles.yml` apuntando a `md:airbyte_trabajo`
-- [ ] `sources.yml` con database y schema correctos
-- [ ] `stg_accidentes`: `NULLIF`, `REPLACE` comas decimales, `CAST` de tipos, columnas `lat_r`/`lon_r`
-- [ ] `stg_clima`: tipado directo, decodificación WMO, columnas join `lat_r`/`lon_r`/`fecha`/`hora`
-- [ ] `int_accidentes_clima`: join por `(lat_r, lon_r, data_inversa, hora)`
-- [ ] `obt_accidentes`: tabla ancha final (OBT) en marts
-- [ ] Materializations: `view` en staging/intermediate, `table` en marts
-- [ ] `dbt run` sin errores
+- [x] Proyecto `dbt_proyect` inicializado, `profiles.yml` apuntando a `md:airbyte_trabajo`
+- [x] `sources.yml` con `database: airbyte_trabajo` y `schema: datatran`
+- [x] `stg_accidentes`: `NULLIF`, `REPLACE` comas decimales, `CAST` de tipos, surrogate key `id_accidente`, columnas `lat_r`/`lon_r`
+- [x] `stg_clima`: tipado directo, deduplicación por row_number, decodificación WMO, columnas join `lat_r`/`lon_r`/`fecha`/`hora`
+- [x] `int_accidentes_clima`: LEFT JOIN por `(lat_r, lon_r, data_inversa, hora)`
+- [x] `obt_accidentes`: tabla ancha final (OBT) en marts, `clima_join_match` indica si hubo dato ERA5
+- [x] Materializations: `view` en staging/intermediate, `table` en marts
+- [x] `dbt run` exitoso sin errores
 
 ### 3. Calidad de Datos con Testing — 15 pts
 
 | Criterio | Pts | Estado |
 |---|---|---|
-| Tests `unique` y `not_null` en primary keys | 3 | ⏳ Pendiente |
-| Mínimo 5 tests de `dbt-expectations` implementados | 6 | ⏳ Pendiente |
-| Tests cubren diferentes dimensiones de calidad | 3 | ⏳ Pendiente |
-| Todos los tests pasan exitosamente | 3 | ⏳ Pendiente |
+| Tests `unique` y `not_null` en primary keys | 3 | ✅ Listo |
+| Mínimo 5 tests de `dbt-expectations` implementados | 6 | ✅ Listo |
+| Tests cubren diferentes dimensiones de calidad | 3 | ✅ Listo |
+| Todos los tests pasan exitosamente | 3 | ✅ Listo |
 
-- [ ] `unique` + `not_null` en `fct_accidentes.id`
-- [ ] `expect_column_values_to_be_between` en `mortos` (0–100) y `latitude` (-34 a 6)
-- [ ] `expect_column_values_to_not_be_null` en `uf`
-- [ ] `expect_column_proportion_of_unique_values` en `municipio`
-- [ ] `expect_column_values_to_match_regex` en `data_inversa`
-- [ ] `dbt test` sin errores
+- [x] `unique` + `not_null` en `stg_accidentes.id_accidente` y `obt_accidentes.id_accidente`
+- [x] `expect_column_values_to_be_between` en `mortos` (0–100) y `latitude` (-34 a 6)
+- [x] `not_null` en `stg_accidentes.uf` y `stg_accidentes.data_inversa`
+- [x] `expect_column_proportion_of_unique_values_to_be_between` en `municipio`
+- [x] `expect_column_values_to_be_between` en `data_inversa` (rango 2026-01-01 a 2026-12-31)
+- [x] `dbt test`: **15/15 tests pasan, 0 warnings**
 
 ### 4. Orquestación con Prefect — 12 pts
 
 | Criterio | Pts | Estado |
 |---|---|---|
-| Pipeline definido con decoradores `@flow` y `@task` | 3 | 🔄 En progreso |
-| Integración con Airbyte (API o SDK) | 4 | 🔄 En progreso |
-| Integración con dbt (`prefect-dbt`) | 3 | 🔄 En progreso |
-| Manejo de errores y logging apropiado | 2 | 🔄 En progreso |
+| Pipeline definido con decoradores `@flow` y `@task` | 3 | ✅ Listo |
+| Integración con Airbyte (API o SDK) | 4 | ✅ Listo |
+| Integración con dbt (`prefect-dbt`) | 3 | ✅ Listo |
+| Manejo de errores y logging apropiado | 2 | ✅ Listo |
 
-- [x] `workspaces/prefect/pipeline.py` creado con 7 tasks usando `@flow` y `@task`
-- [x] Task `airbyte_sync`: dispara sync vía API REST y hace polling cada 10 s
-- [x] Tasks `dbt_run` y `dbt_test`: ejecutan dbt como subproceso con logging
-- [x] Manejo de errores con `raise RuntimeError` y logging en cada task
-- [x] Task `ensure_containers_up`: levanta Docker y espera MySQL ready
-- [x] Task `verify_accidentes_raw`: verifica datos y corre initdb si es necesario
-- [ ] Configurar `workspaces/prefect/.env` con `AIRBYTE_CONNECTION_ID`
-- [ ] Ejecución exitosa end-to-end (captura de Prefect UI)
+- [x] `workspaces/prefect/pipeline.py` con 7 tasks usando `@flow` y `@task`
+- [x] Task `ensure_containers_up`: levanta Docker y espera MySQL ready (reintentos: 2)
+- [x] Task `load_accidentes_raw`: convierte CSVs (convert_csv_to_utf8.py), recrea tabla vía 01_schema.sql y carga todos los `*_utf8.csv` con LOAD DATA LOCAL INFILE
+- [x] Task `extract_openmeteo`: reanudación vía `.progress`/`.failed`, continúa aunque haya fechas fallidas
+- [x] Task `load_clima_raw`: crea tabla y carga CSV; saltea si ya tiene datos
+- [x] Task `airbyte_sync`: dispara sync vía API REST con Basic Auth, polling cada 10 s (timeout: 10 min)
+- [x] Tasks `dbt_run` y `dbt_test`: ejecutan dbt con `--profiles-dir .` como subproceso con logging
+- [x] Ejecución end-to-end exitosa: 7/7 tasks completadas, 15/15 dbt tests pasan
 
 ### 5. Visualización con Metabase — 15 pts
 
@@ -237,91 +254,33 @@ Candidatos para dimensiones:
 
 | Componente | Pts máx | Obtenido |
 |---|---|---|
-| 1. Extracción (Airbyte) | 15 | ~10 (source+dest+sync ✅, falta clima_raw) |
-| 2. Modelado y Transformación (dbt) | 25 | — |
-| 3. Calidad de Datos (Testing) | 15 | — |
-| 4. Orquestación (Prefect) | 12 | ~8 (pipeline creado, falta ejecución) |
-| 5. Visualización (Metabase) | 15 | 2 (conexión ✅) |
-| 6. Reporte Técnico | 10 | ~5 (pasos 1–5 documentados) |
+| 1. Extracción (Airbyte) | 15 | ~15 (2 sources + destination + ambas tablas sincronizadas ✅) |
+| 2. Modelado y Transformación (dbt) | 25 | ~25 (staging + intermediate + OBT + fuente/ref/materializations ✅) |
+| 3. Calidad de Datos (Testing) | 15 | ~15 (15/15 tests pasan, 5+ dbt-expectations ✅) |
+| 4. Orquestación (Prefect) | 12 | ~12 (7 tasks, ejecución end-to-end exitosa ✅) |
+| 5. Visualización (Metabase) | 15 | 2 (conexión ✅, faltan visualizaciones) |
+| 6. Reporte Técnico | 10 | ~6 (pasos 1–5 documentados, faltan resultados finales) |
 | 7. Video Explicativo | 8 | — |
-| **TOTAL** | **100** | **~25** |
+| **TOTAL** | **100** | **~75** |
 
 ---
 
 ## Pasos siguientes (orden sugerido)
 
-### 1. Airbyte — configurar las dos fuentes y el destination
+### 1. Metabase — dashboard
 
-El MySQL ya está operativo con los datos cargados. Configurar en Airbyte:
-
-- **Source MySQL:** host con IP accesible desde Airbyte, base `datatran`, tabla `accidentes_raw`,
-  usuario `airbyte`, sync mode Full Refresh
-- **Source Open-Meteo ERA5:** definir estrategia (Custom Connector o script de extracción que
-  genere un CSV/JSON y se cargue como File source)
-- **Destination MotherDuck:** database `md:airbyte_trabajo`, schema `datatran_raw`
-- Ejecutar sync y verificar tablas en MotherDuck
-
-### 2. dbt — inicializar proyecto y modelos staging
-
-```bash
-cd workspaces/dbt_proyecto
-dbt init
-# Configurar profiles.yml con md:airbyte_trabajo y MOTHERDUCK_TOKEN
-dbt debug   # verificar conexión
-```
-
-Modelos a crear en orden:
-1. `models/staging/sources.yml` — declarar fuentes con database/schema de Airbyte
-2. `models/staging/stg_accidentes.sql` — tipado y limpieza de `accidentes_raw`
-3. `models/staging/stg_clima_openmeteo.sql` — tipado de datos ERA5
-4. `models/marts/dim_*.sql` — dimensiones del esquema estrella
-5. `models/marts/fct_accidentes.sql` — tabla de hechos
-
-### 3. dbt — tests de calidad
-
-Agregar en `models/staging/schema.yml`:
-- Tests genéricos (`unique`, `not_null`) en PKs
-- Al menos 5 tests de `dbt-expectations` cubriendo validez, completitud y consistencia
-
-```bash
-dbt test
-```
-
-### 4. Prefect — pipeline de orquestación
-
-Adaptar `Tarea_Clase_5/workspaces/maven-fuzzy/prefect/ecommerce_pipeline.py`:
-- Cambiar connection ID de Airbyte por el del nuevo sync
-- Cambiar rutas del proyecto dbt
-- Verificar ejecución en `http://localhost:4200`
-
-### 5. Metabase — dashboard
-
-Con los marts de dbt disponibles en MotherDuck:
+Con `obt_accidentes` disponible en MotherDuck (`datatran.marts.obt_accidentes`):
 - Crear las 5 visualizaciones definidas en el checklist
-- Configurar filtros de fecha, UF y condición climática
+- Configurar filtros de fecha, UF, causa del accidente y condición climática ERA5
 - Tomar captura del dashboard completo
 
-### 6. Reporte técnico — completar resultados
+### 2. Reporte técnico — completar resultados
 
-- Agregar capturas de: Airbyte sync exitoso, `dbt run`, `dbt test`, Prefect UI, dashboard
+- Agregar capturas de: Prefect UI (flow run exitoso), `dbt test` (15/15), dashboard Metabase
 - Completar sección de resultados en `main.typ`
 - Exportar a PDF: `typst compile docs/typst/main.typ`
 
-### 7. Video
+### 3. Video
 
-Grabar demostración end-to-end del pipeline una vez que todos los pasos anteriores estén completos.
+Grabar demostración end-to-end: ejecución del pipeline Prefect, Airbyte sync, dbt tests, y navegación del dashboard.
 
----
-
-## Reutilización de Tarea 7
-
-Los siguientes componentes se pueden copiar/adaptar de
-`Tarea_Clase_5/workspaces/maven-fuzzy/`:
-
-| Componente | Archivo origen | Cambios necesarios |
-|---|---|---|
-| Docker Metabase | `containers/Dockerfile` | Ninguno (ya copiado) |
-| docker-compose | `containers/docker-compose.yaml` | Aplicado — prefijo `tf-` |
-| dbt profiles | `dbt_maven_fuzzy/profiles.yml` | Cambiar nombre de proyecto y schema |
-| dbt project | `dbt_maven_fuzzy/dbt_project.yml` | Renombrar a `dbt_datatran` |
-| Pipeline Prefect | `prefect/ecommerce_pipeline.py` | Ajustar connection ID y rutas dbt |

@@ -13,7 +13,7 @@
 #show: it => basic-report(
   doc-category: "Introducción a la Integración de Datos",
   doc-title: "Trabajo Práctico Final",
-  author: "Sergio Enrique Morel Peralta\nClara Patricia Almirón Burgos\nDaniel Ramírez Brizuela",
+  author: "Sergio Enrique Morel Peralta\nClara Patricia Almirón de Silva\nDaniel Ramírez Brizuela",
   affiliation: "Facultad Politécnica - UNA",
   logo: image("assets/fpuna_logo_institucional.svg", width: 2cm),
   language: "es",
@@ -315,13 +315,13 @@ La verificación en MotherDuck confirma que los datos quedaron disponibles en `d
 
 == Paso 4: Modelos dbt
 
-El proyecto dbt en `workspaces/dbt_proyecto/` transforma los datos crudos en tres capas.
+El proyecto dbt en `workspaces/dbt_proyect/` transforma los datos crudos en tres capas.
 
 === Configuración
 
 ```yaml
 # profiles.yml
-dbt_datatran:
+dbt_proyect:
   outputs:
     dev:
       type: duckdb
@@ -334,7 +334,7 @@ dbt_datatran:
 ```yaml
 # dbt_project.yml
 models:
-  dbt_datatran:
+  dbt_proyect:
     staging:
       +materialized: view
       +schema: staging
@@ -381,7 +381,8 @@ Los modelos staging aplican las transformaciones de tipo que no se pudieron hace
 #table(
   columns: (auto, auto, 1fr),
   table.header([*Campo*], [*Tipo*], [*Descripción*]),
-  [`id`],                     [`bigint`],    [ID único del accidente — clave primaria],
+  [`id_accidente`],            [`bigint`],    [Surrogate key generado por dbt (row_number) — clave primaria],
+  [`id_datatran`],             [`varchar`],   [ID original de DATATRAN — informativo, sin garantía de unicidad],
   [`data_inversa`],           [`date`],      [Fecha del accidente],
   [`dia_semana`],             [`varchar`],   [Día de la semana],
   [`horario`],                [`time`],      [Hora del accidente (HH:MM:SS)],
@@ -457,7 +458,7 @@ Se implementa un *One Big Table* (OBT) en lugar de esquema estrella. La justific
 #table(
   columns: (auto, 1fr, auto),
   table.header([*Grupo*], [*Columnas*], [*Origen*]),
-  [Identificación],  [`id`, `data_inversa`, `horario`, `dia_semana`, `fase_dia`],          [DATATRAN],
+  [Identificación],  [`id_accidente`, `id_datatran`, `data_inversa`, `horario`, `dia_semana`, `fase_dia`], [DATATRAN],
   [Localización],    [`uf`, `municipio`, `br`, `km`, `latitude`, `longitude`],              [DATATRAN],
   [Causa y tipo],    [`causa_acidente`, `tipo_acidente`, `classificacao_acidente`],          [DATATRAN],
   [Vía],             [`sentido_via`, `tipo_pista`, `tracado_via`, `uso_solo`],              [DATATRAN],
@@ -479,7 +480,8 @@ Se implementa un *One Big Table* (OBT) en lugar de esquema estrella. La justific
   columns: (auto, auto, 1fr),
   table.header([*Campo*], [*Tipo*], [*Descripción*]),
   table.cell(colspan: 3)[*Identificación*],
-  [`id`],                          [`bigint`],   [ID único del accidente — clave primaria],
+  [`id_accidente`],                [`bigint`],   [Surrogate key generado por dbt — clave primaria],
+  [`id_datatran`],                 [`varchar`],  [ID original de DATATRAN — sin restricción de unicidad],
   [`data_inversa`],                [`date`],     [Fecha del accidente],
   [`dia_semana`],                  [`varchar`],  [Día de la semana],
   [`horario`],                     [`time`],     [Hora del accidente],
@@ -531,7 +533,7 @@ Se implementa un *One Big Table* (OBT) en lugar de esquema estrella. La justific
 #table(
   columns: (2fr, 2fr, 1fr),
   table.header([*Test*], [*Modelo*], [*Dimensión de calidad*]),
-  [#dbt("unique") + #dbt("not_null")],                       [#dbt("obt_accidentes.id")],          [Unicidad / completitud],
+  [#dbt("unique") + #dbt("not_null")],                       [#dbt("obt_accidentes.id_accidente")], [Unicidad / completitud],
   [#dbt("expect_column_values_to_be_between")],              [#dbt("stg_accidentes.mortos")],      [Validez: rango 0–100],
   [#dbt("expect_column_values_to_be_between")],              [#dbt("stg_accidentes.latitude")],    [Validez: rango -34 a 6],
   [#dbt("expect_column_values_to_not_be_null")],             [#dbt("stg_accidentes.uf")],          [Completitud],
@@ -549,9 +551,9 @@ El pipeline se orquesta con Prefect 3 desde `workspaces/prefect/pipeline.py`. Cu
 @flow(name="datatran_pipeline", log_prints=True)
 def datatran_pipeline():
     ensure_containers_up()    # docker compose up -d + espera MySQL
-    verify_accidentes_raw()   # COUNT(*) en MySQL; corre initdb si es necesario
+    load_accidentes_raw()     # convierte CSVs, recrea tabla, LOAD DATA LOCAL INFILE
     extract_openmeteo()       # extrae ERA5 y genera data/clima_openmeteo.csv
-    load_clima_raw()          # crea tabla + LOAD DATA INFILE en MySQL
+    load_clima_raw()          # crea tabla + LOAD DATA LOCAL INFILE en MySQL
     airbyte_sync()            # dispara sync y polling vía API REST
     dbt_run()                 # dbt deps + dbt run
     dbt_test()                # dbt test
@@ -561,7 +563,7 @@ def datatran_pipeline():
   columns: (auto, auto, 1fr),
   table.header([*Task*], [*Nombre*], [*Descripción*]),
   [1], [#dbt("ensure_containers_up")],  [Ejecuta `docker compose up -d` y espera hasta que MySQL acepte conexiones (máx 60 s). Reintentos: 2.],
-  [2], [#dbt("verify_accidentes_raw")], [Verifica que `accidentes_raw` tiene datos. Si está vacía, ejecuta los scripts `01_schema.sql` y `02_load_data.sql` vía `docker exec` y confirma la carga.],
+  [2], [#dbt("load_accidentes_raw")],  [Ejecuta `convert_csv_to_utf8.py` para convertir CSVs nuevos. Luego recrea `accidentes_raw` (DROP + CREATE vía `01_schema.sql`) y carga todos los `*_utf8.csv` de `data/` con LOAD DATA LOCAL INFILE. Reintentos: 1.],
   [3], [#dbt("extract_openmeteo")],     [Lee coordenadas únicas por fecha desde MySQL, las consulta en lotes de 100 a la API ERA5 de Open-Meteo y escribe `data/clima_openmeteo.csv`. Soporta reanudación. Timeout: 30 min.],
   [4], [#dbt("load_clima_raw")],        [Crea la tabla `clima_raw` en MySQL (si no existe) y ejecuta `LOAD DATA INFILE`. Saltea la carga si la tabla ya tiene filas.],
   [5], [#dbt("airbyte_sync")],          [Dispara el sync `MySQL_Datatran → MotherDuck_datatran` vía API REST y hace polling cada 10 s hasta completar o fallar. Timeout: 10 min.],
