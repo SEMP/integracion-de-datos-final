@@ -287,6 +287,15 @@ El paso siguiente configura los metadatos de la connection: nombre, tipo de sche
   caption: [Configuración de la connection: `MySQL_Datatran → MotherDuck_datatran`, schedule Manual, namespace Destination-defined],
 )
 
+=== Incorporación de clima_raw como segundo stream
+
+Una vez generado `clima_openmeteo.csv` y cargado en MySQL mediante el pipeline Prefect, se actualizó el schema de la connection para incluir `clima_raw` como segundo stream. Ambas tablas se sincronizan con *Full Refresh | Overwrite*: `accidentes_raw` con 30/30 campos y `clima_raw` con 13/13 campos.
+
+#figure(
+  image("assets/airbyte_connection_datatran_update.png", width: 100%),
+  caption: [Schema actualizado: `accidentes_raw` (30 campos) y `clima_raw` (13 campos) — ambas con Full Refresh | Overwrite],
+)
+
 === Resultado del sync
 
 El primer sync completó exitosamente en 2 minutos 5 segundos, transfiriendo 7,39 MB con los 11.380 registros de `accidentes_raw`.
@@ -361,6 +370,73 @@ Los modelos staging aplican las transformaciones de tipo que no se pudieron hace
   ],
 )
 
+#figure(
+  image("assets/dbt_staging_tables.svg", width: 100%),
+  caption: [Modelos staging: `stg_accidentes` (izquierda) y `stg_clima` (derecha)],
+)
+
+==== Campos de stg_accidentes
+
+#table(
+  columns: (auto, auto, 1fr),
+  table.header([*Campo*], [*Tipo*], [*Descripción*]),
+  [`id`],                     [`bigint`],    [ID único del accidente — clave primaria],
+  [`data_inversa`],           [`date`],      [Fecha del accidente],
+  [`dia_semana`],             [`varchar`],   [Día de la semana],
+  [`horario`],                [`time`],      [Hora del accidente (HH:MM:SS)],
+  [`uf`],                     [`varchar`],   [Estado federativo (UF)],
+  [`br`],                     [`varchar`],   [Número de ruta federal],
+  [`km`],                     [`decimal`],   [Punto kilométrico],
+  [`municipio`],              [`varchar`],   [Municipio del accidente],
+  [`causa_acidente`],         [`varchar`],   [Causa principal],
+  [`tipo_acidente`],          [`varchar`],   [Tipo de accidente],
+  [`classificacao_acidente`], [`varchar`],   [Gravedad (`NULL` si era `NA`)],
+  [`fase_dia`],               [`varchar`],   [Pleno dia / Anoitecer / Plena Noite / Amanhecer],
+  [`sentido_via`],            [`varchar`],   [Sentido de circulación],
+  [`condicao_metereologica`], [`varchar`],   [Condición climática según el agente PRF],
+  [`tipo_pista`],             [`varchar`],   [Tipo de pista],
+  [`tracado_via`],            [`varchar`],   [Trazado de la vía],
+  [`uso_solo`],               [`varchar`],   [Urbano / Rural],
+  [`pessoas`],                [`int`],       [Total de personas involucradas],
+  [`mortos`],                 [`int`],       [Fallecidos],
+  [`feridos_leves`],          [`int`],       [Heridos leves],
+  [`feridos_graves`],         [`int`],       [Heridos graves],
+  [`ilesos`],                 [`int`],       [Ilesos],
+  [`ignorados`],              [`int`],       [Estado desconocido],
+  [`feridos`],                [`int`],       [Total de heridos],
+  [`veiculos`],               [`int`],       [Vehículos involucrados],
+  [`latitude`],               [`double`],    [Latitud GPS],
+  [`longitude`],              [`double`],    [Longitud GPS],
+  [`lat_r`],                  [`double`],    [`ROUND(latitude, 2)` — clave de join con clima],
+  [`lon_r`],                  [`double`],    [`ROUND(longitude, 2)` — clave de join con clima],
+  [`regional`],               [`varchar`],   [Regional de la PRF],
+  [`delegacia`],              [`varchar`],   [Delegacia de la PRF],
+  [`uop`],                    [`varchar`],   [Unidad operacional de la PRF],
+)
+
+==== Campos de stg_clima
+
+#table(
+  columns: (auto, auto, 1fr),
+  table.header([*Campo*], [*Tipo*], [*Descripción*]),
+  [`lat_r`],                  [`double`],    [`ROUND(latitude, 2)` — clave de join],
+  [`lon_r`],                  [`double`],    [`ROUND(longitude, 2)` — clave de join],
+  [`timestamp_utc`],          [`timestamp`], [Timestamp horario ERA5],
+  [`fecha`],                  [`date`],      [Fecha extraída del timestamp],
+  [`hora`],                   [`int`],       [Hora del día (0–23) — clave de join],
+  [`precipitation`],          [`double`],    [Precipitación horaria (mm/h)],
+  [`weather_code`],           [`int`],       [Código WMO estandarizado],
+  [`weather_desc`],           [`varchar`],   [Descripción del código WMO],
+  [`temperature_2m`],         [`double`],    [Temperatura a 2 m (°C)],
+  [`relative_humidity_2m`],   [`double`],    [Humedad relativa (%)],
+  [`dew_point_2m`],           [`double`],    [Punto de rocío a 2 m (°C)],
+  [`cloud_cover_low`],        [`int`],       [Nubes bajas (%) — proxy de niebla],
+  [`wind_speed_10m`],         [`double`],    [Velocidad del viento a 10 m (km/h)],
+  [`wind_gusts_10m`],         [`double`],    [Ráfagas de viento a 10 m (km/h)],
+  [`shortwave_radiation`],    [`double`],    [Radiación solar (W/m²) — encandilamiento],
+  [`is_day`],                 [`boolean`],   [True si es de día según ERA5],
+)
+
 === Modelo intermedio
 
 ```
@@ -389,6 +465,64 @@ Se implementa un *One Big Table* (OBT) en lugar de esquema estrella. La justific
   [Clima ERA5],      [`precipitation`, `weather_code`, `weather_desc`, `temperature_2m`,\
                       `relative_humidity_2m`, `dew_point_2m`, `cloud_cover_low`,\
                       `wind_speed_10m`, `wind_gusts_10m`, `shortwave_radiation`, `is_day`], [Open-Meteo],
+)
+
+#figure(
+  image("assets/dbt_obt_table.svg", width: 80%),
+  caption: [Estructura de `obt_accidentes` — One Big Table (marts)],
+)
+
+==== Campos de obt_accidentes
+
+#table(
+  columns: (auto, auto, 1fr),
+  table.header([*Campo*], [*Tipo*], [*Descripción*]),
+  table.cell(colspan: 3)[*Identificación*],
+  [`id`],                          [`bigint`],   [ID único del accidente — clave primaria],
+  [`data_inversa`],                [`date`],     [Fecha del accidente],
+  [`dia_semana`],                  [`varchar`],  [Día de la semana],
+  [`horario`],                     [`time`],     [Hora del accidente],
+  [`fase_dia`],                    [`varchar`],  [Pleno dia / Anoitecer / Plena Noite / Amanhecer],
+  table.cell(colspan: 3)[*Localización*],
+  [`uf`],                          [`varchar`],  [Estado federativo],
+  [`municipio`],                   [`varchar`],  [Municipio],
+  [`br`],                          [`varchar`],  [Número de ruta federal],
+  [`km`],                          [`decimal`],  [Punto kilométrico],
+  [`latitude`],                    [`double`],   [Latitud GPS],
+  [`longitude`],                   [`double`],   [Longitud GPS],
+  table.cell(colspan: 3)[*Causa y tipo*],
+  [`causa_acidente`],              [`varchar`],  [Causa principal del accidente],
+  [`tipo_acidente`],               [`varchar`],  [Tipo de accidente],
+  [`classificacao_acidente`],      [`varchar`],  [Gravedad del accidente],
+  table.cell(colspan: 3)[*Características de la vía*],
+  [`sentido_via`],                 [`varchar`],  [Sentido de circulación],
+  [`tipo_pista`],                  [`varchar`],  [Tipo de pista],
+  [`tracado_via`],                 [`varchar`],  [Trazado de la vía],
+  [`uso_solo`],                    [`varchar`],  [Uso del suelo (urbano / rural)],
+  table.cell(colspan: 3)[*Víctimas y vehículos*],
+  [`pessoas`],                     [`int`],      [Total de personas involucradas],
+  [`mortos`],                      [`int`],      [Fallecidos],
+  [`feridos_leves`],               [`int`],      [Heridos leves],
+  [`feridos_graves`],              [`int`],      [Heridos graves],
+  [`ilesos`],                      [`int`],      [Ilesos],
+  [`ignorados`],                   [`int`],      [Estado desconocido],
+  [`feridos`],                     [`int`],      [Total de heridos],
+  [`veiculos`],                    [`int`],      [Vehículos involucrados],
+  table.cell(colspan: 3)[*Clima registrado por PRF*],
+  [`condicao_metereologica`],      [`varchar`],  [Condición subjetiva según el agente PRF],
+  table.cell(colspan: 3)[*Clima ERA5 (Open-Meteo)*],
+  [`clima_precipitation`],         [`double`],   [Precipitación horaria (mm/h)],
+  [`clima_weather_code`],          [`int`],      [Código WMO estandarizado],
+  [`clima_weather_desc`],          [`varchar`],  [Descripción del código WMO],
+  [`clima_temperature_2m`],        [`double`],   [Temperatura a 2 m (°C)],
+  [`clima_relative_humidity_2m`],  [`double`],   [Humedad relativa (%)],
+  [`clima_dew_point_2m`],          [`double`],   [Punto de rocío (°C) — riesgo de escarcha],
+  [`clima_cloud_cover_low`],       [`int`],      [Nubes bajas (%) — proxy de niebla],
+  [`clima_wind_speed_10m`],        [`double`],   [Velocidad del viento (km/h)],
+  [`clima_wind_gusts_10m`],        [`double`],   [Ráfagas de viento (km/h)],
+  [`clima_shortwave_radiation`],   [`double`],   [Radiación solar (W/m²) — encandilamiento],
+  [`clima_is_day`],                [`boolean`],  [True si es de día según ERA5],
+  [`clima_join_match`],            [`boolean`],  [True si se encontró dato ERA5 para el accidente],
 )
 
 === Tests de calidad (dbt-expectations)
@@ -501,6 +635,6 @@ Las decisiones técnicas más relevantes fueron:
 
 - *Open-Meteo ERA5 sobre OpenWeather:* la API gratuita provee más variables relevantes para el análisis vial (ráfagas, nubes bajas, radiación solar) y no requiere gestión de claves API, simplificando la configuración y el despliegue.
 
-- *Esquema estrella (Kimball):* la normalización en dimensiones facilita los filtros en Metabase y evita la redundancia que tendría una OBT con municipios y causas repetidos en cada fila de hecho.
+- *One Big Table (OBT):* con ~11.380 filas, la normalización Kimball agrega complejidad sin beneficio de rendimiento en DuckDB/MotherDuck. El OBT simplifica las consultas de Metabase —todos los filtros y agrupaciones sobre una sola tabla— y es coherente con la ya compleja capa intermedia que resuelve el join con ERA5.
 
 #bibliography("refs.bib", title: "Referencias", style: "ieee")
